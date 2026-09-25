@@ -1,0 +1,132 @@
+package com.example.mymusic
+
+import android.content.ContentUris
+import android.content.Context
+import android.provider.MediaStore
+import androidx.room.*
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+import kotlinx.coroutines.flow.Flow
+
+@Entity(tableName = "tracks")
+data class Track(
+    @PrimaryKey val id: Long,
+    val uri: String,
+    val title: String,
+    val artist: String,
+    val album: String,
+    val durationMs: Long,
+    val mime: String,
+    val artUri: String? = null,
+    val lyrics: String? = null,
+    val spotifyId: String? = null,
+    val fetchedAt: Long = 0,
+    val genre: String = "",
+    val addedAt: Long = 0
+)
+
+@Dao interface TrackDao {
+    @Query("SELECT * FROM tracks ORDER BY title COLLATE NOCASE") fun observe(): Flow<List<Track>>
+    @Query("SELECT * FROM tracks WHERE id = :id") suspend fun get(id: Long): Track?
+    @Query("SELECT * FROM tracks") suspend fun all(): List<Track>
+    @Query("UPDATE tracks SET genre = :genre WHERE artist = :artist AND genre = ''")
+    suspend fun fillGenreForArtist(artist: String, genre: String)
+    @Upsert suspend fun put(track: Track)
+    @Query("DELETE FROM tracks WHERE id NOT IN (:ids)") suspend fun prune(ids: List<Long>)
+    @Query("DELETE FROM tracks") suspend fun clear()
+    @Query("SELECT * FROM tracks ORDER BY addedAt DESC LIMIT :limit") suspend fun recent(limit: Int): List<Track>
+}
+
+@Entity(tableName = "plays", indices = [Index("trackId"), Index("playedAt")])
+data class PlayEvent(@PrimaryKey(autoGenerate = true) val id: Long = 0, val trackId: Long, val playedAt: Long)
+
+@Dao interface PlayDao {
+    @Insert suspend fun put(event: PlayEvent)
+    @Query("SELECT * FROM plays WHERE playedAt >= :since ORDER BY playedAt DESC") fun observeSince(since: Long): Flow<List<PlayEvent>>
+    @Query("SELECT trackId, COUNT(*) AS count FROM plays GROUP BY trackId ORDER BY count DESC LIMIT :limit")
+    suspend fun top(limit: Int): List<PlayCount>
+}
+data class PlayCount(val trackId: Long, val count: Int)
+
+@Entity(tableName = "playlists")
+data class Playlist(@PrimaryKey(autoGenerate = true) val id: Long = 0, val name: String, val createdAt: Long)
+
+@Entity(tableName = "playlist_entries", primaryKeys = ["playlistId", "trackId"])
+data class PlaylistEntry(val playlistId: Long, val trackId: Long, val position: Int)
+
+@Dao interface PlaylistDao {
+    @Query("SELECT * FROM playlists ORDER BY createdAt DESC") fun observe(): Flow<List<Playlist>>
+    @Query("SELECT * FROM playlists") suspend fun all(): List<Playlist>
+    @Insert suspend fun put(playlist: Playlist): Long
+    @Query("DELETE FROM playlists WHERE id = :id") suspend fun delete(id: Long)
+    @Query("SELECT * FROM playlist_entries WHERE playlistId = :id ORDER BY position") fun entries(id: Long): Flow<List<PlaylistEntry>>
+    @Query("SELECT * FROM playlist_entries WHERE playlistId = :id ORDER BY position") suspend fun entriesOnce(id: Long): List<PlaylistEntry>
+    @Upsert suspend fun put(entry: PlaylistEntry)
+    @Query("DELETE FROM playlist_entries WHERE playlistId = :playlistId AND trackId = :trackId")
+    suspend fun remove(playlistId: Long, trackId: Long)
+    @Query("DELETE FROM playlist_entries WHERE playlistId = :id") suspend fun clear(id: Long)
+}
+
+@Entity(tableName = "eq_presets")
+data class EqPreset(@PrimaryKey val name: String, val levels: String, val bass: Int)
+
+@Dao interface EqDao {
+    @Query("SELECT * FROM eq_presets ORDER BY name") fun observe(): Flow<List<EqPreset>>
+    @Upsert suspend fun put(preset: EqPreset)
+}
+
+@Database(entities = [Track::class, EqPreset::class, PlayEvent::class, Playlist::class, PlaylistEntry::class],
+    version = 2, exportSchema = false)
+abstract class MusicDb : RoomDatabase() {
+    abstract fun tracks(): TrackDao
+    abstract fun eq(): EqDao
+    abstract fun plays(): PlayDao
+    abstract fun playlists(): PlaylistDao
+    companion object {
+        @Volatile private var instance: MusicDb? = null
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tracks ADD COLUMN genre TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE tracks ADD COLUMN addedAt INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("CREATE TABLE IF NOT EXISTS plays (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, trackId INTEGER NOT NULL, playedAt INTEGER NOT NULL)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_plays_trackId ON plays (trackId)")
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_plays_playedAt ON plays (playedAt)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS playlists (id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, name TEXT NOT NULL, createdAt INTEGER NOT NULL)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS playlist_entries (playlistId INTEGER NOT NULL, trackId INTEGER NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(playlistId, trackId))")
+            }
+        }
+        fun get(context: Context): MusicDb = instance ?: synchronized(this) {
+            instance ?: Room.databaseBuilder(context.applicationContext, MusicDb::class.java, "music.db")
+                .addMigrations(MIGRATION_1_2).build().also { instance = it }
+        }
+    }
+}
+
+class LocalLibrary(private val context: Context, private val dao: TrackDao) {
+    suspend fun scan() {
+        val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
+            MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.MIME_TYPE,
+            MediaStore.Audio.Media.DATE_ADDED
+        )
+        val ids = mutableListOf<Long>()
+        val cursor = context.contentResolver.query(uri, projection, null, null,
+            "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE") ?: return
+        cursor.use { c ->
+            while (c.moveToNext()) {
+                val id = c.getLong(0)
+                ids += id
+                val old = dao.get(id)
+                dao.put(Track(id, ContentUris.withAppendedId(uri, id).toString(),
+                    if ((old?.fetchedAt ?: 0L) > 0) old!!.title else c.getString(1) ?: "Unknown",
+                    if ((old?.fetchedAt ?: 0L) > 0) old!!.artist else c.getString(2) ?: "Unknown",
+                    c.getString(3) ?: "", c.getLong(4), c.getString(5) ?: "",
+                    old?.artUri, old?.lyrics, old?.spotifyId, old?.fetchedAt ?: 0,
+                    old?.genre ?: "", old?.addedAt?.takeIf { it > 0 } ?: c.getLong(6) * 1000))
+            }
+        }
+        if (ids.isNotEmpty()) dao.prune(ids) else dao.clear()
+    }
+}
