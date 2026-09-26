@@ -41,6 +41,8 @@
     <string name="ui_lyrics_are_loading_or_unavailable">Текст загружается или недоступен</string>
     <string name="ui_back">Назад</string>
     <string name="ui_playback">Воспроизведение</string>
+    <string name="ui_sound_enhancement_on">Улучшение звука включено</string>
+    <string name="ui_sound_enhancement_off">Улучшение звука выключено</string>
     <string name="ui_set_sleep_timer">Установить таймер сна</string>
     <string name="ui_playlist_backup">Резервная копия плейлистов</string>
     <string name="ui_a_local_backup_is_saved_automatically_when_playlists_change">Локальная копия сохраняется при изменении плейлистов.</string>

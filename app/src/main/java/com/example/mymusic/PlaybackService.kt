@@ -2,6 +2,7 @@ package com.example.mymusic
 
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.LoudnessEnhancer
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Player
@@ -28,6 +29,7 @@ class PlaybackService : MediaSessionService() {
     private var session: MediaSession? = null
     private var equalizer: Equalizer? = null
     private var bassBoost: BassBoost? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
     private var sessionId = C.AUDIO_SESSION_ID_UNSET
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var crossfadeJob: Job? = null
@@ -139,19 +141,21 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun attachEffects(id: Int) {
-        equalizer?.release(); bassBoost?.release()
+        equalizer?.release(); bassBoost?.release(); loudnessEnhancer?.release()
         equalizer = runCatching { Equalizer(0, id).apply { enabled = true } }.getOrNull()
         bassBoost = runCatching { BassBoost(0, id).apply { enabled = true } }.getOrNull()
+        loudnessEnhancer = runCatching { LoudnessEnhancer(id).apply { setTargetGain(500) } }.getOrNull()
         AudioEffects.equalizer = equalizer
         AudioEffects.bassBoost = bassBoost
+        AudioEffects.loudnessEnhancer = loudnessEnhancer
         AudioEffects.restore(this)
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
     override fun onDestroy() {
-        AudioEffects.equalizer = null; AudioEffects.bassBoost = null
-        equalizer?.release(); bassBoost?.release()
+        AudioEffects.equalizer = null; AudioEffects.bassBoost = null; AudioEffects.loudnessEnhancer = null
+        equalizer?.release(); bassBoost?.release(); loudnessEnhancer?.release()
         crossfadeJob?.cancel()
         session?.release(); player.release(); overlapPlayer.release()
         scope.cancel()

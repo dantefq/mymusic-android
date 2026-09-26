@@ -576,6 +576,9 @@ class MainActivity : ComponentActivity() {
         val view = LocalView.current
         var showLyrics by remember(track?.id) { mutableStateOf(false) }
         val context = LocalContext.current
+        var enhanced by remember {
+            mutableStateOf(context.getSharedPreferences("eq", MODE_PRIVATE).getBoolean("enhancer", false))
+        }
         val imageLoader = remember { ImageLoader(context) }
         val artworkColor by produceState(initialValue = Color(0xFF303C45), key1 = track?.artUri) {
             value = withContext(Dispatchers.IO) {
@@ -671,6 +674,15 @@ class MainActivity : ComponentActivity() {
                 PlayerAction(Icons.Default.GraphicEq, l("Equalizer"), onEqualizer)
             }
             Spacer(Modifier.height(17.dp))
+            OutlinedButton(onClick = {
+                enhanced = !enhanced
+                AudioEffects.setEnhanced(context, enhanced)
+            }, enabled = track != null, modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = accent)) {
+                Icon(Icons.Default.AutoAwesome, null, modifier = Modifier.size(19.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(if (enhanced) l("Sound enhancement on") else l("Sound enhancement off"))
+            }
             Spacer(Modifier.height(13.dp))
         }
     }

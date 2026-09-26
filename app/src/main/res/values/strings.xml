@@ -41,6 +41,8 @@
     <string name="ui_lyrics_are_loading_or_unavailable">Lyrics are loading or unavailable</string>
     <string name="ui_back">Back</string>
     <string name="ui_playback">Playback</string>
+    <string name="ui_sound_enhancement_on">Sound enhancement on</string>
+    <string name="ui_sound_enhancement_off">Sound enhancement off</string>
     <string name="ui_set_sleep_timer">Set sleep timer</string>
     <string name="ui_playlist_backup">Playlist backup</string>
     <string name="ui_a_local_backup_is_saved_automatically_when_playlists_change">A local backup is saved automatically when playlists change.</string>

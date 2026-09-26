@@ -3,10 +3,17 @@ package com.example.mymusic
 import android.content.Context
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.LoudnessEnhancer
 
 object AudioEffects {
     var equalizer: Equalizer? = null
     var bassBoost: BassBoost? = null
+    var loudnessEnhancer: LoudnessEnhancer? = null
+    fun setEnhanced(context: Context, enabled: Boolean) {
+        context.getSharedPreferences("eq", Context.MODE_PRIVATE).edit()
+            .putBoolean("enhancer", enabled).apply()
+        runCatching { loudnessEnhancer?.enabled = enabled }
+    }
     fun bandCount(): Int = equalizer?.numberOfBands?.toInt() ?: 0
     fun range(): IntRange {
         val r = equalizer?.bandLevelRange ?: return -1500..1500
@@ -35,6 +42,7 @@ object AudioEffects {
             if (i < bandCount()) runCatching { equalizer?.setBandLevel(i.toShort(), value.toInt().toShort()) }
         }
         bassBoost?.setStrength(prefs.getInt("bass", 0).toShort())
+        runCatching { loudnessEnhancer?.enabled = prefs.getBoolean("enhancer", false) }
     }
     private fun save(context: Context) {
         context.getSharedPreferences("eq", Context.MODE_PRIVATE).edit()
