@@ -5,7 +5,7 @@
     <string name="next">Next</string>
     <string name="play_pause">Play or pause</string>
     <string name="ui_library">Library</string>
-    <string name="ui_for_you">For You</string>
+    <string name="ui_my_wave">My Wave</string>
     <string name="ui_genres">Genres</string>
     <string name="ui_playlists">Playlists</string>
     <string name="ui_stats">Stats</string>
@@ -54,7 +54,7 @@
     <string name="ui_bass_boost">Bass boost</string>
     <string name="ui_custom_preset_name">Custom preset name</string>
     <string name="ui_save_preset">Save preset</string>
-    <string name="ui_your_most_played_recent_finds_and_favorite_sounds">Your most played, recent finds, and favorite sounds</string>
+    <string name="ui_an_endless_mix_shaped_by_your_listening">An endless mix shaped by your listening</string>
     <string name="ui_all_genres">All genres</string>
     <string name="ui_explore_your_library_by_sound">Explore your library by sound</string>
     <string name="ui_other">Other</string>

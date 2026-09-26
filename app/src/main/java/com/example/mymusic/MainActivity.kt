@@ -162,14 +162,15 @@ class MainActivity : ComponentActivity() {
 
     private fun play(tracks: List<Track>, selected: Track) {
         val player = controller ?: run { message = localized("Player is starting. Try again."); return }
-        player.setMediaItems(tracks.map { track ->
-            MediaItem.Builder().setMediaId(track.id.toString()).setUri(Uri.parse(track.uri))
-                .setMediaMetadata(MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
-                    .setAlbumTitle(track.album).setArtworkUri(track.artUri?.let(Uri::parse)).build()).build()
-        }, tracks.indexOf(selected), 0)
+        player.setMediaItems(tracks.map(::mediaItem), tracks.indexOf(selected), 0)
         player.prepare()
         player.play()
     }
+
+    private fun mediaItem(track: Track): MediaItem = MediaItem.Builder()
+        .setMediaId(track.id.toString()).setUri(Uri.parse(track.uri))
+        .setMediaMetadata(MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
+            .setAlbumTitle(track.album).setArtworkUri(track.artUri?.let(Uri::parse)).build()).build()
 
     @Composable private fun Screen() {
         val tracks by db.tracks().observe().collectAsStateWithLifecycle(emptyList())
@@ -181,6 +182,8 @@ class MainActivity : ComponentActivity() {
         var position by remember { mutableLongStateOf(0L) }
         var duration by remember { mutableLongStateOf(0L) }
         var page by remember { mutableStateOf("library") }
+        var waveActive by remember { mutableStateOf(false) }
+        var waveSeed by remember { mutableIntStateOf(1) }
         var equalizerReturnPage by remember { mutableStateOf("library") }
         var query by remember { mutableStateOf("") }
         var losslessOnly by remember { mutableStateOf(false) }
@@ -210,6 +213,20 @@ class MainActivity : ComponentActivity() {
                 delay(500)
             }
         }
+        LaunchedEffect(mediaId, waveActive, tracks, plays) {
+            if (waveActive && player != null && mediaId != null) {
+                if (player.currentMediaItemIndex > 30) {
+                    player.removeMediaItems(0, player.currentMediaItemIndex - 10)
+                }
+                if (player.mediaItemCount - player.currentMediaItemIndex <= 5) {
+                    val recent = ((player.currentMediaItemIndex - 7).coerceAtLeast(0)..player.currentMediaItemIndex)
+                        .mapNotNull { index -> player.getMediaItemAt(index).mediaId.toLongOrNull() }.toSet()
+                    val mix = myWaveMix(tracks, plays, waveSeed++)
+                    val next = mix.filterNot { it.id in recent }.ifEmpty { mix }.take(20)
+                    player.addMediaItems(next.map(::mediaItem))
+                }
+            }
+        }
         LaunchedEffect(message) {
             if (message.isNotBlank()) { snackbar.showSnackbar(message); message = "" }
         }
@@ -219,6 +236,10 @@ class MainActivity : ComponentActivity() {
                 (!losslessOnly || track.isLossless())
         }
         val togglePlay: () -> Unit = { player?.let { if (it.isPlaying) it.pause() else it.play() }; Unit }
+        val playNormal: (List<Track>, Track) -> Unit = { list, track ->
+            waveActive = false
+            play(list, track)
+        }
         BackHandler(page != "library") {
             page = when (page) {
                 "equalizer" -> equalizerReturnPage
@@ -230,7 +251,7 @@ class MainActivity : ComponentActivity() {
             SnackbarHost(snackbar) { data -> Snackbar(data, containerColor = raised, contentColor = white) }
         },
             bottomBar = {
-                if (page in listOf("library", "for_you", "genres", "playlists", "stats")) {
+                if (page in listOf("library", "my_wave", "genres", "playlists", "stats")) {
                     Column {
                         if (active != null) MiniPlayer(active, playing, position, duration,
                             onOpen = { page = "player" }, onPlay = togglePlay,
@@ -241,7 +262,7 @@ class MainActivity : ComponentActivity() {
                         NavigationBar(containerColor = ink, tonalElevation = 0.dp) {
                             listOf(
                                 Triple("library", Icons.Default.LibraryMusic, l("Library")),
-                                Triple("for_you", Icons.Default.AutoAwesome, l("For You")),
+                                Triple("my_wave", Icons.Default.AutoAwesome, l("My Wave")),
                                 Triple("genres", Icons.Default.Category, l("Genres")),
                                 Triple("playlists", Icons.Default.QueueMusic, l("Playlists")),
                                 Triple("stats", Icons.Default.BarChart, l("Stats"))
@@ -296,8 +317,11 @@ class MainActivity : ComponentActivity() {
                     val request = MediaStore.createDeleteRequest(contentResolver, listOf(Uri.parse(track.uri)))
                     deleteDuplicate.launch(IntentSenderRequest.Builder(request.intentSender).build())
                 }, modifier = Modifier.padding(inner))
-                "for_you" -> ForYouScreen(tracks, plays, { list, track -> play(list, track) }, Modifier.padding(inner))
-                "genres" -> GenresScreen(tracks, { list, track -> play(list, track) },
+                "my_wave" -> MyWaveScreen(tracks, plays, { list, track ->
+                    waveActive = true
+                    play(list, track)
+                }, Modifier.padding(inner))
+                "genres" -> GenresScreen(tracks, playNormal,
                     onFetch = {
                         lifecycleScope.launch {
                             message = localized("Fetching genres…")
@@ -309,7 +333,7 @@ class MainActivity : ComponentActivity() {
                             message = localized("Genres updated")
                         }
                     }, modifier = Modifier.padding(inner))
-                "playlists" -> PlaylistsScreen(db, tracks, { list, track -> play(list, track) }, Modifier.padding(inner))
+                "playlists" -> PlaylistsScreen(db, tracks, playNormal, Modifier.padding(inner))
                 "stats" -> StatsScreen(tracks, plays, Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))
                 else -> LibraryPage(visible, tracks.size, query, { query = it }, losslessOnly,
@@ -317,8 +341,8 @@ class MainActivity : ComponentActivity() {
                     onScan = ::requestOrScan,
                     onSettings = { page = "settings" },
                     onEqualizer = { equalizerReturnPage = "library"; page = "equalizer" },
-                    onShuffle = { if (visible.isNotEmpty()) { val shuffled = visible.shuffled(); play(shuffled, shuffled.first()) } },
-                    onTrack = { play(visible, it) },
+                    onShuffle = { if (visible.isNotEmpty()) { val shuffled = visible.shuffled(); playNormal(shuffled, shuffled.first()) } },
+                    onTrack = { playNormal(visible, it) },
                     activeId = mediaId, modifier = Modifier.padding(inner))
             }
             }

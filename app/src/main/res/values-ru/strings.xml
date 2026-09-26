@@ -5,7 +5,7 @@
     <string name="next">Следующий</string>
     <string name="play_pause">Воспроизвести или приостановить</string>
     <string name="ui_library">Медиатека</string>
-    <string name="ui_for_you">Для вас</string>
+    <string name="ui_my_wave">Моя волна</string>
     <string name="ui_genres">Жанры</string>
     <string name="ui_playlists">Плейлисты</string>
     <string name="ui_stats">Статистика</string>
@@ -54,7 +54,7 @@
     <string name="ui_bass_boost">Усиление басов</string>
     <string name="ui_custom_preset_name">Название пресета</string>
     <string name="ui_save_preset">Сохранить пресет</string>
-    <string name="ui_your_most_played_recent_finds_and_favorite_sounds">Любимые песни, новинки и знакомые жанры</string>
+    <string name="ui_an_endless_mix_shaped_by_your_listening">Бесконечный микс по вашим прослушиваниям</string>
     <string name="ui_all_genres">Все жанры</string>
     <string name="ui_explore_your_library_by_sound">Музыка по жанрам</string>
     <string name="ui_other">Другое</string>

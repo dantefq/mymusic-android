@@ -40,15 +40,20 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-fun forYouMix(tracks: List<Track>, plays: List<PlayEvent>): List<Track> {
+fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<Track> {
     val counts = plays.groupingBy { it.trackId }.eachCount()
-    val favoriteGenres = tracks.filter { (counts[it.id] ?: 0) > 0 }.groupingBy { it.genre }.eachCount()
+    val favoriteGenres = tracks.filter { (counts[it.id] ?: 0) > 0 }
+        .groupingBy { it.genre }.eachCount()
+    val favoriteArtists = tracks.filter { (counts[it.id] ?: 0) > 0 }
+        .groupingBy { it.artist }.eachCount()
     val now = System.currentTimeMillis()
-    return tracks.sortedWith(compareByDescending<Track> {
-        (counts[it.id] ?: 0) * 10 +
-            (if (it.addedAt > now - 14L * 86400000) 6 else 0) +
-            (favoriteGenres[it.genre] ?: 0) * 2
-    }.thenBy { it.title }).take(50)
+    val random = kotlin.random.Random(seed)
+    return tracks.map { track ->
+        val weight = 1.0 + (counts[track.id] ?: 0).coerceAtMost(10) * 2 +
+            (favoriteGenres[track.genre] ?: 0) + (favoriteArtists[track.artist] ?: 0) * 2 +
+            (if (track.addedAt > now - 14L * 86400000) 3 else 0)
+        track to -kotlin.math.ln(random.nextDouble().coerceAtLeast(1e-9)) / weight
+    }.sortedBy { it.second }.map { it.first }
 }
 
 @Composable fun CollectionHeader(title: String, subtitle: String) {
@@ -75,11 +80,11 @@ fun forYouMix(tracks: List<Track>, plays: List<PlayEvent>): List<Track> {
     }
 }
 
-@Composable fun ForYouScreen(tracks: List<Track>, plays: List<PlayEvent>, onPlay: (List<Track>, Track) -> Unit,
+@Composable fun MyWaveScreen(tracks: List<Track>, plays: List<PlayEvent>, onPlay: (List<Track>, Track) -> Unit,
     modifier: Modifier = Modifier) {
-    val mix = remember(tracks, plays) { forYouMix(tracks, plays) }
+    val mix = remember(tracks, plays) { myWaveMix(tracks, plays).take(20) }
     LazyColumn(modifier.fillMaxSize()) {
-        item { CollectionHeader(l("For You"), l("Your most played, recent finds, and favorite sounds")) }
+        item { CollectionHeader(l("My Wave"), l("An endless mix shaped by your listening")) }
         items(mix, key = { it.id }) { track -> CollectionTrack(track, { onPlay(mix, track) }) }
     }
 }
