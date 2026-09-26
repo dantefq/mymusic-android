@@ -71,7 +71,7 @@ import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import coil.compose.AsyncImage
-import coil.ImageLoader
+import coil.Coil
 import coil.request.ImageRequest
 import androidx.palette.graphics.Palette
 import kotlinx.coroutines.Dispatchers
@@ -186,6 +186,7 @@ class MainActivity : ComponentActivity() {
         var waveSeed by remember { mutableIntStateOf(1) }
         var equalizerReturnPage by remember { mutableStateOf("library") }
         var query by remember { mutableStateOf("") }
+        var settledQuery by remember { mutableStateOf("") }
         var duplicates by remember { mutableStateOf<List<DuplicateGroup>?>(null) }
         var outputOpen by remember { mutableStateOf(false) }
         val snackbar = remember { SnackbarHostState() }
@@ -228,10 +229,15 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(message) {
             if (message.isNotBlank()) { snackbar.showSnackbar(message); message = "" }
         }
-        val active = tracks.firstOrNull { it.id.toString() == mediaId }
-        val visible = tracks.filter { track ->
-            track.title.contains(query, true) || track.artist.contains(query, true) || track.album.contains(query, true)
+        LaunchedEffect(query) {
+            delay(220)
+            settledQuery = query
         }
+        val active = remember(tracks, mediaId) { tracks.firstOrNull { it.id.toString() == mediaId } }
+        val visible = remember(tracks, settledQuery) { tracks.filter { track ->
+            track.title.contains(settledQuery, true) || track.artist.contains(settledQuery, true) ||
+                track.album.contains(settledQuery, true)
+        } }
         val togglePlay: () -> Unit = { player?.let { if (it.isPlaying) it.pause() else it.play() }; Unit }
         val playNormal: (List<Track>, Track) -> Unit = { list, track ->
             waveActive = false
@@ -493,9 +499,14 @@ class MainActivity : ComponentActivity() {
             contentAlignment = Alignment.Center) {
             Icon(Icons.Default.MusicNote, l("Album artwork"), tint = accent.copy(alpha = 0.75f),
                 modifier = Modifier.fillMaxSize(0.38f))
-            if (track?.artUri != null) AsyncImage(model = ImageRequest.Builder(LocalContext.current)
-                    .data(track.artUri).crossfade(280).build(), contentDescription = l("Album artwork"),
+            if (track?.artUri != null) {
+                val context = LocalContext.current
+                val request = remember(context, track.artUri) {
+                    ImageRequest.Builder(context).data(track.artUri).crossfade(280).build()
+                }
+                AsyncImage(model = request, contentDescription = l("Album artwork"),
                 contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            }
         }
     }
 
@@ -579,12 +590,13 @@ class MainActivity : ComponentActivity() {
         var enhanced by remember {
             mutableStateOf(context.getSharedPreferences("eq", MODE_PRIVATE).getBoolean("enhancer", false))
         }
-        val imageLoader = remember { ImageLoader(context) }
+        val imageLoader = remember(context) { Coil.imageLoader(context) }
         val artworkColor by produceState(initialValue = Color(0xFF303C45), key1 = track?.artUri) {
             value = withContext(Dispatchers.IO) {
                 runCatching {
                     val uri = track?.artUri ?: return@runCatching Color(0xFF303C45)
-                    val result = imageLoader.execute(ImageRequest.Builder(context).data(uri).build())
+                    val result = imageLoader.execute(ImageRequest.Builder(context).data(uri)
+                        .size(48, 48).allowHardware(false).build())
                     val bitmap = result.drawable?.toBitmap() ?: return@runCatching Color(0xFF303C45)
                     Color(Palette.from(bitmap).generate().getDominantColor(0xFF303C45.toInt()))
                 }.getOrDefault(Color(0xFF303C45))

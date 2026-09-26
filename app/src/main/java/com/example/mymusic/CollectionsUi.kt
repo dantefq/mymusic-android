@@ -136,11 +136,16 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
     modifier: Modifier = Modifier) {
     var month by remember { mutableStateOf(false) }
     val since = System.currentTimeMillis() - (if (month) 30L else 7L) * 86400000
-    val recent = plays.filter { it.playedAt >= since }
-    val count = recent.groupingBy { it.trackId }.eachCount()
-    val top = tracks.filter { it.id in count }.sortedByDescending { count[it.id] }.take(10)
-    val artists = recent.mapNotNull { play -> tracks.firstOrNull { it.id == play.trackId }?.artist }
-        .groupingBy { it }.eachCount().toList().sortedByDescending { it.second }.take(5)
+    val recent = remember(plays, month) { plays.filter { it.playedAt >= since } }
+    val count = remember(recent) { recent.groupingBy { it.trackId }.eachCount() }
+    val byId = remember(tracks) { tracks.associateBy { it.id } }
+    val top = remember(tracks, count) {
+        tracks.filter { it.id in count }.sortedByDescending { count[it.id] }.take(10)
+    }
+    val artists = remember(recent, byId) {
+        recent.mapNotNull { byId[it.trackId]?.artist }.groupingBy { it }.eachCount()
+            .toList().sortedByDescending { it.second }.take(5)
+    }
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
         item {
             TextButton(onClick = onBack, modifier = Modifier.padding(start = 16.dp)) { Text(l("Back")) }
@@ -190,7 +195,8 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
     var name by remember { mutableStateOf("") }
     val entries by (selected?.let { db.playlists().entries(it.id) }
         ?: kotlinx.coroutines.flow.flowOf(emptyList())).collectAsStateWithLifecycle(emptyList())
-    val ordered = entries.mapNotNull { entry -> tracks.firstOrNull { it.id == entry.trackId } }
+    val byId = remember(tracks) { tracks.associateBy { it.id } }
+    val ordered = remember(entries, byId) { entries.mapNotNull { byId[it.trackId] } }
     Column(modifier.fillMaxSize()) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
