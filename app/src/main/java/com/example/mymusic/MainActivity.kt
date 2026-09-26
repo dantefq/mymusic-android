@@ -95,6 +95,7 @@ class MainActivity : ComponentActivity() {
     private val db by lazy { MusicDb.get(this) }
     private val metadata by lazy { Metadata(this, db.tracks()) }
     private var controller by mutableStateOf<MediaController?>(null)
+    private var activityDestroyed = false
     private var message by mutableStateOf("")
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
         if (allowed) scan() else message = localized("Allow audio access to see your music")
@@ -135,7 +136,9 @@ class MainActivity : ComponentActivity() {
         window.navigationBarColor = android.graphics.Color.rgb(12, 16, 24)
         window.decorView.systemUiVisibility = 0
         val future = MediaController.Builder(this, SessionToken(this, android.content.ComponentName(this, PlaybackService::class.java))).buildAsync()
-        future.addListener({ runCatching { controller = future.get() }.onFailure { message = it.message ?: localized("Playback unavailable") } },
+        future.addListener({ runCatching { future.get() }
+            .onSuccess { if (activityDestroyed) it.release() else controller = it }
+            .onFailure { if (!activityDestroyed) message = it.message ?: localized("Playback unavailable") } },
             ContextCompat.getMainExecutor(this))
         requestOrScan()
         setContent {
@@ -893,7 +896,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        activityDestroyed = true
         controller?.release()
+        controller = null
         super.onDestroy()
     }
 }
