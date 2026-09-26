@@ -34,6 +34,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.res.stringResource
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.session.MediaController
+import androidx.media3.common.Player
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -377,6 +378,15 @@ object PlaylistBackup {
 
 @Composable fun QueueScreen(player: MediaController?, onBack: () -> Unit, modifier: Modifier = Modifier) {
     var revision by remember { mutableIntStateOf(0) }
+    DisposableEffect(player) {
+        val listener = object : Player.Listener {
+            override fun onTimelineChanged(timeline: androidx.media3.common.Timeline, reason: Int) {
+                revision++
+            }
+        }
+        player?.addListener(listener)
+        onDispose { player?.removeListener(listener) }
+    }
     val items = remember(player, revision) {
         (0 until (player?.mediaItemCount ?: 0)).map { index ->
             index to player!!.getMediaItemAt(index)
@@ -387,7 +397,7 @@ object PlaylistBackup {
             TextButton(onClick = onBack, modifier = Modifier.padding(start = 16.dp)) { Text(l("Back")) }
             CollectionHeader(l("Queue"), stringResource(R.string.songs_count, items.size))
         }
-        items(items, key = { it.second.mediaId }) { (index, item) ->
+        items(items, key = { it.first }) { (index, item) ->
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f).clickable { player?.seekToDefaultPosition(index) }) {
