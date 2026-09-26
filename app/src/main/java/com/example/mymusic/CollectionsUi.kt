@@ -89,6 +89,15 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
     }
 }
 
+@Composable fun AudiobooksScreen(tracks: List<Track>, onPlay: (List<Track>, Track) -> Unit,
+    modifier: Modifier = Modifier) {
+    val books = remember(tracks) { tracks.filter { it.isAudiobook } }
+    LazyColumn(modifier.fillMaxSize()) {
+        item { CollectionHeader(l("Audiobooks"), stringResource(R.string.songs_count, books.size)) }
+        items(books, key = { it.id }) { track -> CollectionTrack(track, { onPlay(books, track) }) }
+    }
+}
+
 @Composable fun GenresScreen(tracks: List<Track>, onPlay: (List<Track>, Track) -> Unit,
     onFetch: () -> Unit,
     modifier: Modifier = Modifier) {

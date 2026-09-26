@@ -249,7 +249,7 @@ class MainActivity : ComponentActivity() {
             SnackbarHost(snackbar) { data -> Snackbar(data, containerColor = raised, contentColor = white) }
         },
             bottomBar = {
-                if (page in listOf("library", "my_wave", "genres", "playlists", "stats")) {
+                if (page in listOf("library", "my_wave", "genres", "audiobooks", "playlists", "stats")) {
                     Column {
                         if (active != null) MiniPlayer(active, playing, position, duration,
                             onOpen = { page = "player" }, onPlay = togglePlay,
@@ -262,6 +262,7 @@ class MainActivity : ComponentActivity() {
                                 Triple("library", Icons.Default.LibraryMusic, l("Library")),
                                 Triple("my_wave", Icons.Default.AutoAwesome, l("My Wave")),
                                 Triple("genres", Icons.Default.Category, l("Genres")),
+                                Triple("audiobooks", Icons.Default.MenuBook, l("Audiobooks")),
                                 Triple("playlists", Icons.Default.QueueMusic, l("Playlists")),
                                 Triple("stats", Icons.Default.BarChart, l("Stats"))
                             ).forEach { (destination, icon, label) ->
@@ -331,6 +332,7 @@ class MainActivity : ComponentActivity() {
                             message = localized("Genres updated")
                         }
                     }, modifier = Modifier.padding(inner))
+                "audiobooks" -> AudiobooksScreen(tracks, playNormal, Modifier.padding(inner))
                 "playlists" -> PlaylistsScreen(db, tracks, playNormal, Modifier.padding(inner))
                 "stats" -> StatsScreen(tracks, plays, Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))

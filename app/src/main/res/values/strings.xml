@@ -7,6 +7,7 @@
     <string name="ui_library">Library</string>
     <string name="ui_my_wave">My Wave</string>
     <string name="ui_genres">Genres</string>
+    <string name="ui_audiobooks">Audiobooks</string>
     <string name="ui_playlists">Playlists</string>
     <string name="ui_stats">Stats</string>
     <string name="ui_settings">Settings</string>

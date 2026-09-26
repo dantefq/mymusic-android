@@ -24,7 +24,8 @@ data class Track(
     val fetchedAt: Long = 0,
     val genre: String = "",
     val addedAt: Long = 0,
-    val needsOnline: Boolean = false
+    val needsOnline: Boolean = false,
+    @ColumnInfo(defaultValue = "0") val isAudiobook: Boolean = false
 )
 
 @Dao interface TrackDao {
@@ -78,7 +79,7 @@ data class EqPreset(@PrimaryKey val name: String, val levels: String, val bass: 
 }
 
 @Database(entities = [Track::class, EqPreset::class, PlayEvent::class, Playlist::class, PlaylistEntry::class],
-    version = 3, exportSchema = false)
+    version = 4, exportSchema = false)
 abstract class MusicDb : RoomDatabase() {
     abstract fun tracks(): TrackDao
     abstract fun eq(): EqDao
@@ -105,9 +106,14 @@ abstract class MusicDb : RoomDatabase() {
                 db.execSQL("ALTER TABLE tracks_new RENAME TO tracks")
             }
         }
+        private val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE tracks ADD COLUMN isAudiobook INTEGER NOT NULL DEFAULT 0")
+            }
+        }
         fun get(context: Context): MusicDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, MusicDb::class.java, "music.db")
-                .addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build().also { instance = it }
         }
     }
 }
@@ -120,7 +126,7 @@ class LocalLibrary(private val context: Context, private val dao: TrackDao) {
             MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.DATE_ADDED, MediaStore.Audio.Media.DISPLAY_NAME,
-            MediaStore.Audio.Media.DATA
+            MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.RELATIVE_PATH
         )
         val tags = LocalTagReader(context)
         val ids = mutableListOf<Long>()
@@ -134,6 +140,10 @@ class LocalLibrary(private val context: Context, private val dao: TrackDao) {
                 val trackUri = ContentUris.withAppendedId(uri, id)
                 val local = tags.read(trackUri, id, c.getString(8))
                 val fileName = c.getString(7)?.substringBeforeLast('.')?.tagValue()
+                val audiobook = c.getString(7)?.endsWith(".m4b", true) == true ||
+                    c.getString(9)?.contains("audiobook", true) == true ||
+                    local.genre?.contains("audiobook", true) == true ||
+                    local.genre?.contains("spoken word", true) == true
                 val online = old?.takeIf { it.fetchedAt > 0 }
                 dao.put(Track(
                     id, trackUri.toString(),
@@ -144,7 +154,8 @@ class LocalLibrary(private val context: Context, private val dao: TrackDao) {
                     local.artUri ?: old?.artUri, local.lyrics ?: old?.lyrics,
                     old?.fetchedAt ?: 0, local.genre ?: old?.genre.orEmpty(),
                     old?.addedAt?.takeIf { it > 0 } ?: c.getLong(6) * 1000,
-                    local.title == null || local.artist == null || local.album == null || local.artUri == null
+                    local.title == null || local.artist == null || local.album == null || local.artUri == null,
+                    audiobook
                 ))
             }
         }
