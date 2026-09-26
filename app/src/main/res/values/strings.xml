@@ -65,6 +65,7 @@
     <string name="ui_fetching_genres">Fetching genres…</string>
     <string name="ui_genres_updated">Genres updated</string>
     <string name="ui_listening">Listening</string>
+    <string name="ui_listening_statistics">Listening statistics</string>
     <string name="ui_week">Week</string>
     <string name="ui_month">Month</string>
     <string name="ui_top_tracks">Top tracks</string>

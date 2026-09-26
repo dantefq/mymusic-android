@@ -241,6 +241,7 @@ class MainActivity : ComponentActivity() {
         BackHandler(page != "library") {
             page = when (page) {
                 "equalizer" -> equalizerReturnPage
+                "stats" -> "settings"
                 else -> "library"
             }
         }
@@ -249,7 +250,7 @@ class MainActivity : ComponentActivity() {
             SnackbarHost(snackbar) { data -> Snackbar(data, containerColor = raised, contentColor = white) }
         },
             bottomBar = {
-                if (page in listOf("library", "my_wave", "audiobooks", "playlists", "stats")) {
+                if (page in listOf("library", "my_wave", "audiobooks", "playlists")) {
                     Column {
                         if (active != null) MiniPlayer(active, playing, position, duration,
                             onOpen = { page = "player" }, onPlay = togglePlay,
@@ -262,8 +263,7 @@ class MainActivity : ComponentActivity() {
                                 Triple("library", Icons.Default.LibraryMusic, l("Library")),
                                 Triple("my_wave", Icons.Default.AutoAwesome, l("My Wave")),
                                 Triple("audiobooks", Icons.Default.MenuBook, l("Audiobooks")),
-                                Triple("playlists", Icons.Default.QueueMusic, l("Playlists")),
-                                Triple("stats", Icons.Default.BarChart, l("Stats"))
+                                Triple("playlists", Icons.Default.QueueMusic, l("Playlists"))
                             ).forEach { (destination, icon, label) ->
                                 NavigationBarItem(selected = page == destination,
                                     onClick = { page = destination },
@@ -304,7 +304,8 @@ class MainActivity : ComponentActivity() {
                 "equalizer" -> EqualizerPage(presets, onBack = { page = equalizerReturnPage },
                     modifier = Modifier.padding(inner))
                 "settings" -> SettingsPage(onBack = { page = "library" },
-                    onDuplicates = { page = "duplicates" }, modifier = Modifier.padding(inner))
+                    onDuplicates = { page = "duplicates" }, onStats = { page = "stats" },
+                    modifier = Modifier.padding(inner))
                 "duplicates" -> DuplicatesScreen(duplicates, onScan = {
                     lifecycleScope.launch {
                         message = localized("Scanning files…")
@@ -321,7 +322,8 @@ class MainActivity : ComponentActivity() {
                 }, Modifier.padding(inner))
                 "audiobooks" -> AudiobooksScreen(tracks, playNormal, Modifier.padding(inner))
                 "playlists" -> PlaylistsScreen(db, tracks, playNormal, Modifier.padding(inner))
-                "stats" -> StatsScreen(tracks, plays, Modifier.padding(inner))
+                "stats" -> StatsScreen(tracks, plays, onBack = { page = "settings" },
+                    modifier = Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))
                 else -> LibraryPage(visible, tracks.size, query, { query = it },
                     onScan = ::requestOrScan,
@@ -740,6 +742,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable private fun SettingsPage(onBack: () -> Unit, onDuplicates: () -> Unit,
+        onStats: () -> Unit,
         modifier: Modifier = Modifier) {
         val playbackPrefs = remember { getSharedPreferences("playback", MODE_PRIVATE) }
         var crossfade by remember { mutableFloatStateOf(playbackPrefs.getInt("crossfade", 0).toFloat()) }
@@ -795,6 +798,9 @@ class MainActivity : ComponentActivity() {
                     Spacer(Modifier.height(20.dp))
                     OutlinedButton(onClick = onDuplicates, modifier = Modifier.fillMaxWidth()) {
                         Text(l("Find duplicate files"))
+                    }
+                    OutlinedButton(onClick = onStats, modifier = Modifier.fillMaxWidth()) {
+                        Text(l("Listening statistics"))
                     }
                 }
             }

@@ -65,6 +65,7 @@
     <string name="ui_fetching_genres">Загрузка жанров…</string>
     <string name="ui_genres_updated">Жанры обновлены</string>
     <string name="ui_listening">Прослушивания</string>
+    <string name="ui_listening_statistics">Статистика прослушиваний</string>
     <string name="ui_week">Неделя</string>
     <string name="ui_month">Месяц</string>
     <string name="ui_top_tracks">Популярные песни</string>

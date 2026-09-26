@@ -132,7 +132,8 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
     }
 }
 
-@Composable fun StatsScreen(tracks: List<Track>, plays: List<PlayEvent>, modifier: Modifier = Modifier) {
+@Composable fun StatsScreen(tracks: List<Track>, plays: List<PlayEvent>, onBack: () -> Unit,
+    modifier: Modifier = Modifier) {
     var month by remember { mutableStateOf(false) }
     val since = System.currentTimeMillis() - (if (month) 30L else 7L) * 86400000
     val recent = plays.filter { it.playedAt >= since }
@@ -142,6 +143,7 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
         .groupingBy { it }.eachCount().toList().sortedByDescending { it.second }.take(5)
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
         item {
+            TextButton(onClick = onBack, modifier = Modifier.padding(start = 16.dp)) { Text(l("Back")) }
             CollectionHeader(l("Listening"), stringResource(R.string.plays_period, recent.size, if (month) 30 else 7))
             Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 FilterChip(selected = !month, onClick = { month = false }, label = { Text(l("Week")) })
