@@ -22,9 +22,12 @@ import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -499,12 +502,21 @@ class MainActivity : ComponentActivity() {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     onQueue()
                 }).padding(9.dp), verticalAlignment = Alignment.CenterVertically) {
-                Artwork(track, Modifier.size(46.dp), 10.dp)
-                Spacer(Modifier.width(11.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(track.title, color = white, fontWeight = FontWeight.SemiBold,
-                        fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(track.artist, color = muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                AnimatedContent(targetState = track, modifier = Modifier.weight(1f), label = "mini track",
+                    transitionSpec = {
+                        (slideInHorizontally(tween(220)) { it / 5 } + fadeIn(tween(220))) togetherWith
+                            (slideOutHorizontally(tween(180)) { -it / 5 } + fadeOut(tween(180)))
+                    }) { current ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Artwork(current, Modifier.size(46.dp), 10.dp)
+                        Spacer(Modifier.width(11.dp))
+                        Column {
+                            Text(current.title, color = white, fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(current.artist, color = muted, fontSize = 12.sp, maxLines = 1,
+                                overflow = TextOverflow.Ellipsis)
+                        }
+                    }
                 }
                 IconButton(onClick = onPrevious, modifier = Modifier.size(37.dp)) {
                     Icon(Icons.Default.SkipPrevious, l("Previous"), tint = white)
@@ -547,8 +559,9 @@ class MainActivity : ComponentActivity() {
                 }.getOrDefault(Color(0xFF303C45))
             }
         }
+        val animatedArtworkColor by animateColorAsState(artworkColor, tween(350), label = "artwork color")
         Column(modifier.fillMaxSize().background(Brush.verticalGradient(
-            listOf(artworkColor.copy(alpha = 0.7f), ink, ink)))
+            listOf(animatedArtworkColor.copy(alpha = 0.7f), ink, ink)))
             .pointerInput(Unit) {
             var dy = 0f
             detectVerticalDragGestures(onVerticalDrag = { change, amount ->
