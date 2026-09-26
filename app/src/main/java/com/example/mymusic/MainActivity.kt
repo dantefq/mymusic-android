@@ -328,7 +328,6 @@ class MainActivity : ComponentActivity() {
                     onScan = ::requestOrScan,
                     onOutput = { outputOpen = true },
                     onSettings = { page = "settings" },
-                    onEqualizer = { equalizerReturnPage = "library"; page = "equalizer" },
                     onShuffle = { list -> if (list.isNotEmpty()) { val shuffled = list.shuffled(); playNormal(shuffled, shuffled.first()) } },
                     onTrack = playNormal,
                     activeId = mediaId, modifier = Modifier.padding(inner))
@@ -366,7 +365,7 @@ class MainActivity : ComponentActivity() {
     @Composable private fun LibraryPage(
         tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
         onScan: () -> Unit, onOutput: () -> Unit,
-        onSettings: () -> Unit, onEqualizer: () -> Unit, onShuffle: (List<Track>) -> Unit,
+        onSettings: () -> Unit, onShuffle: (List<Track>) -> Unit,
         onTrack: (List<Track>, Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
     ) {
         var searchOpen by remember { mutableStateOf(false) }
@@ -390,7 +389,6 @@ class MainActivity : ComponentActivity() {
                     Icon(Icons.Default.Search, l("Search"), tint = white)
                 }
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onEqualizer) { Icon(Icons.Default.Equalizer, l("Equalizer"), tint = white) }
                 IconButton(onClick = onScan) { Icon(Icons.Default.Refresh, l("Rescan library"), tint = white) }
                 IconButton(onClick = onOutput) { Icon(Icons.Default.Speaker, l("Output device"), tint = white) }
                 IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, l("Settings"), tint = white) }
