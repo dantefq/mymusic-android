@@ -270,7 +270,6 @@ class MainActivity : ComponentActivity() {
                     onNext = { player?.seekToNextMediaItem() },
                     onSeek = { player?.seekTo(it) },
                     onEqualizer = { equalizerReturnPage = "player"; page = "equalizer" },
-                    onLyrics = { page = "lyrics" },
                     onConvert = { active?.let { track ->
                         busy = true
                         lifecycleScope.launch {
@@ -282,8 +281,6 @@ class MainActivity : ComponentActivity() {
                     } }, modifier = Modifier.padding(inner))
                 "equalizer" -> EqualizerPage(presets, onBack = { page = equalizerReturnPage },
                     modifier = Modifier.padding(inner))
-                "lyrics" -> LyricsPage(active, position, onSeek = { player?.seekTo(it) },
-                    onBack = { page = "player" }, modifier = Modifier.padding(inner))
                 "settings" -> SettingsPage(onBack = { page = "library" },
                     onDuplicates = { page = "duplicates" }, modifier = Modifier.padding(inner))
                 "duplicates" -> DuplicatesScreen(duplicates, onScan = {
@@ -522,9 +519,10 @@ class MainActivity : ComponentActivity() {
     @Composable private fun PlayerPage(track: Track?, playing: Boolean, position: Long, duration: Long,
         busy: Boolean, onBack: () -> Unit, onPlay: () -> Unit, onPrevious: () -> Unit,
         onNext: () -> Unit, onSeek: (Long) -> Unit, onEqualizer: () -> Unit,
-        onLyrics: () -> Unit, onConvert: () -> Unit,
+        onConvert: () -> Unit,
         modifier: Modifier = Modifier) {
         val view = LocalView.current
+        var showLyrics by remember(track?.id) { mutableStateOf(false) }
         val context = LocalContext.current
         val imageLoader = remember { ImageLoader(context) }
         val artworkColor by produceState(initialValue = Color(0xFF303C45), key1 = track?.artUri) {
@@ -558,22 +556,28 @@ class MainActivity : ComponentActivity() {
                 IconButton(onClick = onEqualizer) { Icon(Icons.Default.Equalizer, l("Equalizer"), tint = white) }
             }
             Spacer(Modifier.weight(0.65f))
-            AnimatedContent(targetState = track, label = "album art", transitionSpec = {
+            AnimatedContent(targetState = showLyrics, label = "player lyrics", transitionSpec = {
                 fadeIn(tween(300)) togetherWith fadeOut(tween(300))
-            }) { current ->
-                Artwork(current, Modifier.fillMaxWidth().aspectRatio(1f).padding(horizontal = 12.dp)
-                    .pointerInput(current?.id) {
-                        var dx = 0f
-                        detectHorizontalDragGestures(onHorizontalDrag = { change, amount ->
-                            change.consume(); dx += amount
-                        }, onDragEnd = {
-                            if (kotlin.math.abs(dx) > 85f) {
-                                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                                if (dx < 0) onNext() else onPrevious()
-                            }
-                            dx = 0f
-                        })
-                    }, 26.dp)
+            }) { lyricsVisible ->
+                Box(Modifier.fillMaxWidth().aspectRatio(1f).padding(horizontal = 12.dp)) {
+                    if (lyricsVisible) LyricsPanel(track, position, onSeek, Modifier.fillMaxSize())
+                    else AnimatedContent(targetState = track, label = "album art", transitionSpec = {
+                        fadeIn(tween(300)) togetherWith fadeOut(tween(300))
+                    }) { current ->
+                        Artwork(current, Modifier.fillMaxSize().pointerInput(current?.id) {
+                            var dx = 0f
+                            detectHorizontalDragGestures(onHorizontalDrag = { change, amount ->
+                                change.consume(); dx += amount
+                            }, onDragEnd = {
+                                if (kotlin.math.abs(dx) > 85f) {
+                                    view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+                                    if (dx < 0) onNext() else onPrevious()
+                                }
+                                dx = 0f
+                            })
+                        }, 26.dp)
+                    }
+                }
             }
             Spacer(Modifier.weight(0.8f))
             Text(track?.title ?: l("Nothing playing"), color = white, fontSize = 27.sp,
@@ -610,7 +614,7 @@ class MainActivity : ComponentActivity() {
             }
             Spacer(Modifier.weight(0.7f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-                PlayerAction(Icons.Default.FormatAlignLeft, l("Lyrics"), onLyrics)
+                PlayerAction(Icons.Default.FormatAlignLeft, l("Lyrics")) { showLyrics = !showLyrics }
                 PlayerAction(Icons.Default.GraphicEq, l("Equalizer"), onEqualizer)
             }
             Spacer(Modifier.height(17.dp))
@@ -635,20 +639,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Composable private fun LyricsPage(track: Track?, position: Long, onSeek: (Long) -> Unit,
-        onBack: () -> Unit, modifier: Modifier = Modifier) {
+    @Composable private fun LyricsPanel(track: Track?, position: Long, onSeek: (Long) -> Unit,
+        modifier: Modifier = Modifier) {
         val timed = remember(track?.lyrics) { parseLrc(track?.lyrics.orEmpty()) }
         val active = timed.indexOfLast { it.first <= position }.coerceAtLeast(0)
         val listState = androidx.compose.foundation.lazy.rememberLazyListState()
         LaunchedEffect(active, timed.size) {
             if (timed.isNotEmpty()) listState.animateScrollToItem(active)
         }
-        Column(modifier.fillMaxSize()) {
-            PageHeader(l("Lyrics"), onBack)
-            Text(track?.title ?: "", color = white, fontSize = 23.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(start = 26.dp, end = 26.dp, top = 20.dp))
-            Text(track?.artist ?: "", color = muted, modifier = Modifier.padding(start = 26.dp, top = 4.dp))
-            LazyColumn(state = listState, contentPadding = PaddingValues(26.dp)) {
+        Column(modifier.clip(RoundedCornerShape(26.dp)).background(panel)) {
+            LazyColumn(state = listState, contentPadding = PaddingValues(22.dp)) {
                 if (timed.isNotEmpty()) items(timed.size) { index ->
                     val (time, line) = timed[index]
                     Text(line, color = if (index == active) accent else muted,
@@ -657,7 +657,7 @@ class MainActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxWidth().clickable { onSeek(time) }
                             .padding(vertical = 12.dp))
                 } else item {
-                    Text(track?.lyrics?.ifBlank { null } ?: l("No lyrics yet. Tap Get details on the player to search LRCLIB."),
+                    Text(track?.lyrics?.ifBlank { null } ?: l("Lyrics are loading or unavailable"),
                         color = if (track?.lyrics.isNullOrBlank()) muted else white,
                         fontSize = 19.sp, lineHeight = 31.sp)
                 }

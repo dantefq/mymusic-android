@@ -37,7 +37,7 @@
     <string name="ui_get_details">Get details</string>
     <string name="ui_convert_to_verified_flac">Convert to verified FLAC</string>
     <string name="ui_converting_verifying">Converting and verifying…</string>
-    <string name="ui_no_lyrics_yet_tap_get_details_on_the_player_to_search_lrclib">No lyrics yet. Tap Get details on the player to search LRCLIB.</string>
+    <string name="ui_lyrics_are_loading_or_unavailable">Lyrics are loading or unavailable</string>
     <string name="ui_back">Back</string>
     <string name="ui_playback">Playback</string>
     <string name="ui_set_sleep_timer">Set sleep timer</string>

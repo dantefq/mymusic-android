@@ -37,7 +37,7 @@
     <string name="ui_get_details">Найти сведения</string>
     <string name="ui_convert_to_verified_flac">Преобразовать в проверенный FLAC</string>
     <string name="ui_converting_verifying">Преобразование и проверка…</string>
-    <string name="ui_no_lyrics_yet_tap_get_details_on_the_player_to_search_lrclib">Текст пока не найден. Нажмите «Найти сведения» для поиска в LRCLIB.</string>
+    <string name="ui_lyrics_are_loading_or_unavailable">Текст загружается или недоступен</string>
     <string name="ui_back">Назад</string>
     <string name="ui_playback">Воспроизведение</string>
     <string name="ui_set_sleep_timer">Установить таймер сна</string>
