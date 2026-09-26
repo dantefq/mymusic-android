@@ -25,6 +25,17 @@ class Metadata(private val context: Context, private val dao: TrackDao) {
         }.forEach { track -> runCatching { enrich(track) } }
     }
 
+    suspend fun fetchLyrics(id: Long) = withContext(Dispatchers.IO) {
+        val track = dao.get(id)?.takeIf { it.lyrics.isNullOrBlank() } ?: return@withContext
+        val url = "https://lrclib.net/api/get?track_name=${Uri.encode(track.title)}" +
+            "&artist_name=${Uri.encode(track.artist)}&album_name=${Uri.encode(track.album)}" +
+            (if (track.durationMs > 0) "&duration=${track.durationMs / 1000}" else "")
+        val json = getJson(url)
+        val lyrics = json?.optString("syncedLyrics").tagValue()
+            ?: json?.optString("plainLyrics").tagValue() ?: return@withContext
+        dao.get(id)?.takeIf { it.lyrics.isNullOrBlank() }?.let { dao.put(it.copy(lyrics = lyrics)) }
+    }
+
     suspend fun enrich(track: Track): Track = withContext(Dispatchers.IO) {
         val uri = Uri.parse(track.uri)
         val path = runCatching {

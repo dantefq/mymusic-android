@@ -271,11 +271,6 @@ class MainActivity : ComponentActivity() {
                     onSeek = { player?.seekTo(it) },
                     onEqualizer = { equalizerReturnPage = "player"; page = "equalizer" },
                     onLyrics = { page = "lyrics" },
-                    onEnrich = { active?.let { track -> lifecycleScope.launch {
-                        runCatching { metadata.enrich(track) }
-                            .onSuccess { message = localized("Track details checked") }
-                            .onFailure { message = it.message ?: localized("Metadata lookup failed") }
-                    } } },
                     onConvert = { active?.let { track ->
                         busy = true
                         lifecycleScope.launch {
@@ -527,7 +522,7 @@ class MainActivity : ComponentActivity() {
     @Composable private fun PlayerPage(track: Track?, playing: Boolean, position: Long, duration: Long,
         busy: Boolean, onBack: () -> Unit, onPlay: () -> Unit, onPrevious: () -> Unit,
         onNext: () -> Unit, onSeek: (Long) -> Unit, onEqualizer: () -> Unit,
-        onLyrics: () -> Unit, onEnrich: () -> Unit, onConvert: () -> Unit,
+        onLyrics: () -> Unit, onConvert: () -> Unit,
         modifier: Modifier = Modifier) {
         val view = LocalView.current
         val context = LocalContext.current
@@ -616,7 +611,6 @@ class MainActivity : ComponentActivity() {
             Spacer(Modifier.weight(0.7f))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
                 PlayerAction(Icons.Default.FormatAlignLeft, l("Lyrics"), onLyrics)
-                PlayerAction(Icons.Default.AutoAwesome, l("Get details"), onEnrich)
                 PlayerAction(Icons.Default.GraphicEq, l("Equalizer"), onEqualizer)
             }
             Spacer(Modifier.height(17.dp))

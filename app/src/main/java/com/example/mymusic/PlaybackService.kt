@@ -31,6 +31,7 @@ class PlaybackService : MediaSessionService() {
     private var sessionId = C.AUDIO_SESSION_ID_UNSET
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var crossfadeJob: Job? = null
+    private val metadata by lazy { Metadata(this, MusicDb.get(this).tracks()) }
 
     override fun onCreate() {
         super.onCreate()
@@ -51,6 +52,7 @@ class PlaybackService : MediaSessionService() {
                     scope.launch(Dispatchers.IO) {
                         MusicDb.get(this@PlaybackService).plays().put(PlayEvent(trackId = id,
                             playedAt = System.currentTimeMillis()))
+                        runCatching { metadata.fetchLyrics(id) }
                     }
                 }
                 override fun onAudioSessionIdChanged(audioSessionId: Int) {
