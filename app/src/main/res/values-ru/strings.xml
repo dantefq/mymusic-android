@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Моя музыка</string>
+    <string name="app_name">MyMusic</string>
     <string name="album_art">Обложка альбома</string>
     <string name="previous">Предыдущий</string>
     <string name="next">Следующий</string>
