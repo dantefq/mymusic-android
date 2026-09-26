@@ -483,6 +483,18 @@ class MainActivity : ComponentActivity() {
                         dy = 0f
                     })
                 }
+                .pointerInput(track.id) {
+                    var dx = 0f
+                    detectHorizontalDragGestures(onHorizontalDrag = { change, amount ->
+                        change.consume(); dx += amount
+                    }, onDragEnd = {
+                        if (kotlin.math.abs(dx) > 80f) {
+                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                            if (dx < 0) onNext() else onPrevious()
+                        }
+                        dx = 0f
+                    })
+                }
                 .combinedClickable(onClick = onOpen, onLongClick = {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     onQueue()
