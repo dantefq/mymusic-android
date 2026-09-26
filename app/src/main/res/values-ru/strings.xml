@@ -23,7 +23,6 @@
     <string name="ui_add_music_to_your_phone_then_scan_again">Добавьте музыку на телефон и обновите медиатеку.</string>
     <string name="ui_try_another_search_or_filter">Измените поиск или фильтр.</string>
     <string name="ui_scan_music">Найти музыку</string>
-    <string name="ui_connect_spotify_for_artwork_details">Подключить Spotify для обложек и сведений</string>
     <string name="ui_album_artwork">Обложка альбома</string>
     <string name="ui_previous">Предыдущий</string>
     <string name="ui_next">Следующий</string>
@@ -40,16 +39,6 @@
     <string name="ui_converting_verifying">Преобразование и проверка…</string>
     <string name="ui_no_lyrics_yet_tap_get_details_on_the_player_to_search_lrclib">Текст пока не найден. Нажмите «Найти сведения» для поиска в LRCLIB.</string>
     <string name="ui_back">Назад</string>
-    <string name="ui_spotify">Spotify</string>
-    <string name="ui_paste_an_access_token_or_enter_an_app_client_id_and_secret">Вставьте токен доступа или укажите Client ID и секрет приложения.</string>
-    <string name="ui_connected">Подключено</string>
-    <string name="ui_not_connected">Не подключено</string>
-    <string name="ui_client_id">Client ID</string>
-    <string name="ui_client_secret">Секрет клиента</string>
-    <string name="ui_access_token">Токен доступа</string>
-    <string name="ui_checking">Проверка…</string>
-    <string name="ui_validate_save">Проверить и сохранить</string>
-    <string name="ui_disconnect">Отключить</string>
     <string name="ui_playback">Воспроизведение</string>
     <string name="ui_set_sleep_timer">Установить таймер сна</string>
     <string name="ui_playlist_backup">Резервная копия плейлистов</string>
@@ -70,7 +59,6 @@
     <string name="ui_explore_your_library_by_sound">Музыка по жанрам</string>
     <string name="ui_other">Другое</string>
     <string name="ui_fetch_genres">Загрузить жанры</string>
-    <string name="ui_connect_spotify_in_settings">Подключите Spotify в настройках</string>
     <string name="ui_fetching_genres">Загрузка жанров…</string>
     <string name="ui_genres_updated">Жанры обновлены</string>
     <string name="ui_listening">Прослушивания</string>
@@ -119,11 +107,6 @@
     <string name="ui_conversion_failed">Ошибка преобразования</string>
     <string name="ui_scanning_files">Проверка файлов…</string>
     <string name="ui_duplicate_scan_complete">Поиск дубликатов завершён</string>
-    <string name="ui_spotify_connected">Spotify подключён</string>
-    <string name="ui_spotify_rejected_the_token">Spotify отклонил токен</string>
-    <string name="ui_spotify_validation_failed">Ошибка проверки Spotify</string>
-    <string name="ui_enter_an_access_token_or_a_client_id_and_secret">Введите токен доступа или Client ID и секрет</string>
-    <string name="ui_spotify_credentials_rejected">Spotify отклонил учётные данные</string>
     <string name="ui_sleep_timer_off">Таймер сна выключен</string>
     <string name="ui_sleep_timer_set">Таймер сна установлен</string>
     <string name="ui_language">Язык</string>

@@ -23,7 +23,6 @@
     <string name="ui_add_music_to_your_phone_then_scan_again">Add music to your phone, then scan again.</string>
     <string name="ui_try_another_search_or_filter">Try another search or filter.</string>
     <string name="ui_scan_music">Scan music</string>
-    <string name="ui_connect_spotify_for_artwork_details">Connect Spotify for artwork &amp; details</string>
     <string name="ui_album_artwork">Album artwork</string>
     <string name="ui_previous">Previous</string>
     <string name="ui_next">Next</string>
@@ -40,16 +39,6 @@
     <string name="ui_converting_verifying">Converting and verifying…</string>
     <string name="ui_no_lyrics_yet_tap_get_details_on_the_player_to_search_lrclib">No lyrics yet. Tap Get details on the player to search LRCLIB.</string>
     <string name="ui_back">Back</string>
-    <string name="ui_spotify">Spotify</string>
-    <string name="ui_paste_an_access_token_or_enter_an_app_client_id_and_secret">Paste an access token, or enter an app client ID and secret.</string>
-    <string name="ui_connected">Connected</string>
-    <string name="ui_not_connected">Not connected</string>
-    <string name="ui_client_id">Client ID</string>
-    <string name="ui_client_secret">Client secret</string>
-    <string name="ui_access_token">Access token</string>
-    <string name="ui_checking">Checking…</string>
-    <string name="ui_validate_save">Validate &amp; save</string>
-    <string name="ui_disconnect">Disconnect</string>
     <string name="ui_playback">Playback</string>
     <string name="ui_set_sleep_timer">Set sleep timer</string>
     <string name="ui_playlist_backup">Playlist backup</string>
@@ -70,7 +59,6 @@
     <string name="ui_explore_your_library_by_sound">Explore your library by sound</string>
     <string name="ui_other">Other</string>
     <string name="ui_fetch_genres">Fetch genres</string>
-    <string name="ui_connect_spotify_in_settings">Connect Spotify in Settings</string>
     <string name="ui_fetching_genres">Fetching genres…</string>
     <string name="ui_genres_updated">Genres updated</string>
     <string name="ui_listening">Listening</string>
@@ -119,11 +107,6 @@
     <string name="ui_conversion_failed">Conversion failed</string>
     <string name="ui_scanning_files">Scanning files…</string>
     <string name="ui_duplicate_scan_complete">Duplicate scan complete</string>
-    <string name="ui_spotify_connected">Spotify connected</string>
-    <string name="ui_spotify_rejected_the_token">Spotify rejected the token</string>
-    <string name="ui_spotify_validation_failed">Spotify validation failed</string>
-    <string name="ui_enter_an_access_token_or_a_client_id_and_secret">Enter an access token or a client ID and secret</string>
-    <string name="ui_spotify_credentials_rejected">Spotify credentials rejected</string>
     <string name="ui_sleep_timer_off">Sleep timer off</string>
     <string name="ui_sleep_timer_set">Sleep timer set</string>
     <string name="ui_language">Language</string>

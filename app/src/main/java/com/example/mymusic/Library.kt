@@ -6,7 +6,9 @@ import android.provider.MediaStore
 import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 
 @Entity(tableName = "tracks")
 data class Track(
@@ -19,10 +21,10 @@ data class Track(
     val mime: String,
     val artUri: String? = null,
     val lyrics: String? = null,
-    val spotifyId: String? = null,
     val fetchedAt: Long = 0,
     val genre: String = "",
-    val addedAt: Long = 0
+    val addedAt: Long = 0,
+    val needsOnline: Boolean = false
 )
 
 @Dao interface TrackDao {
@@ -76,7 +78,7 @@ data class EqPreset(@PrimaryKey val name: String, val levels: String, val bass: 
 }
 
 @Database(entities = [Track::class, EqPreset::class, PlayEvent::class, Playlist::class, PlaylistEntry::class],
-    version = 2, exportSchema = false)
+    version = 3, exportSchema = false)
 abstract class MusicDb : RoomDatabase() {
     abstract fun tracks(): TrackDao
     abstract fun eq(): EqDao
@@ -95,36 +97,55 @@ abstract class MusicDb : RoomDatabase() {
                 db.execSQL("CREATE TABLE IF NOT EXISTS playlist_entries (playlistId INTEGER NOT NULL, trackId INTEGER NOT NULL, position INTEGER NOT NULL, PRIMARY KEY(playlistId, trackId))")
             }
         }
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE tracks_new (id INTEGER NOT NULL PRIMARY KEY, uri TEXT NOT NULL, title TEXT NOT NULL, artist TEXT NOT NULL, album TEXT NOT NULL, durationMs INTEGER NOT NULL, mime TEXT NOT NULL, artUri TEXT, lyrics TEXT, fetchedAt INTEGER NOT NULL, genre TEXT NOT NULL, addedAt INTEGER NOT NULL, needsOnline INTEGER NOT NULL)")
+                db.execSQL("INSERT INTO tracks_new SELECT id, uri, title, artist, album, durationMs, mime, CASE WHEN artUri LIKE 'http%' THEN NULL ELSE artUri END, lyrics, 0, genre, addedAt, 1 FROM tracks")
+                db.execSQL("DROP TABLE tracks")
+                db.execSQL("ALTER TABLE tracks_new RENAME TO tracks")
+            }
+        }
         fun get(context: Context): MusicDb = instance ?: synchronized(this) {
             instance ?: Room.databaseBuilder(context.applicationContext, MusicDb::class.java, "music.db")
-                .addMigrations(MIGRATION_1_2).build().also { instance = it }
+                .addMigrations(MIGRATION_1_2, MIGRATION_2_3).build().also { instance = it }
         }
     }
 }
 
 class LocalLibrary(private val context: Context, private val dao: TrackDao) {
-    suspend fun scan() {
+    suspend fun scan() = withContext(Dispatchers.IO) {
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.MIME_TYPE,
-            MediaStore.Audio.Media.DATE_ADDED
+            MediaStore.Audio.Media.DATE_ADDED, MediaStore.Audio.Media.DISPLAY_NAME,
+            MediaStore.Audio.Media.DATA
         )
+        val tags = LocalTagReader(context)
         val ids = mutableListOf<Long>()
         val cursor = context.contentResolver.query(uri, projection, null, null,
-            "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE") ?: return
+            "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE") ?: return@withContext
         cursor.use { c ->
             while (c.moveToNext()) {
                 val id = c.getLong(0)
                 ids += id
                 val old = dao.get(id)
-                dao.put(Track(id, ContentUris.withAppendedId(uri, id).toString(),
-                    if ((old?.fetchedAt ?: 0L) > 0) old!!.title else c.getString(1) ?: "Unknown",
-                    if ((old?.fetchedAt ?: 0L) > 0) old!!.artist else c.getString(2) ?: "Unknown",
-                    c.getString(3) ?: "", c.getLong(4), c.getString(5) ?: "",
-                    old?.artUri, old?.lyrics, old?.spotifyId, old?.fetchedAt ?: 0,
-                    old?.genre ?: "", old?.addedAt?.takeIf { it > 0 } ?: c.getLong(6) * 1000))
+                val trackUri = ContentUris.withAppendedId(uri, id)
+                val local = tags.read(trackUri, id, c.getString(8))
+                val fileName = c.getString(7)?.substringBeforeLast('.')?.tagValue()
+                val online = old?.takeIf { it.fetchedAt > 0 }
+                dao.put(Track(
+                    id, trackUri.toString(),
+                    local.title ?: online?.title.tagValue() ?: fileName ?: c.getString(1).tagValue() ?: "Unknown",
+                    local.artist ?: online?.artist.tagValue() ?: c.getString(2).tagValue() ?: "Unknown",
+                    local.album ?: online?.album.tagValue() ?: c.getString(3).tagValue().orEmpty(),
+                    c.getLong(4), c.getString(5) ?: "",
+                    local.artUri ?: old?.artUri, local.lyrics ?: old?.lyrics,
+                    old?.fetchedAt ?: 0, local.genre ?: old?.genre.orEmpty(),
+                    old?.addedAt?.takeIf { it > 0 } ?: c.getLong(6) * 1000,
+                    local.title == null || local.artist == null || local.album == null || local.artUri == null
+                ))
             }
         }
         if (ids.isNotEmpty()) dao.prune(ids) else dao.clear()

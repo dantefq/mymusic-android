@@ -127,6 +127,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        lifecycleScope.launch(Dispatchers.IO) { deleteSharedPreferences("spotify_secure") }
         window.statusBarColor = android.graphics.Color.rgb(11, 13, 18)
         window.navigationBarColor = android.graphics.Color.rgb(11, 13, 18)
         window.decorView.systemUiVisibility = 0
@@ -147,7 +148,10 @@ class MainActivity : ComponentActivity() {
 
     private fun scan() = lifecycleScope.launch {
         runCatching { withContext(Dispatchers.IO) { LocalLibrary(this@MainActivity, db.tracks()).scan() } }
-            .onSuccess { message = localized("Library updated") }
+            .onSuccess {
+                message = localized("Library updated")
+                lifecycleScope.launch { metadata.enrichMissing() }
+            }
             .onFailure { message = it.message ?: localized("Scan failed") }
     }
 
@@ -298,9 +302,7 @@ class MainActivity : ComponentActivity() {
                 "for_you" -> ForYouScreen(tracks, plays, { list, track -> play(list, track) }, Modifier.padding(inner))
                 "genres" -> GenresScreen(tracks, { list, track -> play(list, track) },
                     onFetch = {
-                        if (!SpotifyCredentials(this@MainActivity).connected) {
-                            message = localized("Connect Spotify in Settings")
-                        } else lifecycleScope.launch {
+                        lifecycleScope.launch {
                             message = localized("Fetching genres…")
                             tracks.filter { it.genre.isBlank() }.forEach { track ->
                                 if (db.tracks().get(track.id)?.genre.isNullOrBlank()) {
@@ -316,7 +318,6 @@ class MainActivity : ComponentActivity() {
                 else -> LibraryPage(visible, tracks.size, query, { query = it }, losslessOnly,
                     { losslessOnly = !losslessOnly },
                     onScan = ::requestOrScan,
-                    onSpotify = { page = "settings" },
                     onSettings = { page = "settings" },
                     onEqualizer = { equalizerReturnPage = "library"; page = "equalizer" },
                     onShuffle = { if (visible.isNotEmpty()) { val shuffled = visible.shuffled(); play(shuffled, shuffled.first()) } },
@@ -356,7 +357,7 @@ class MainActivity : ComponentActivity() {
     @Composable private fun LibraryPage(
         tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
         losslessOnly: Boolean, onLossless: () -> Unit, onScan: () -> Unit,
-        onSpotify: () -> Unit, onSettings: () -> Unit, onEqualizer: () -> Unit, onShuffle: () -> Unit,
+        onSettings: () -> Unit, onEqualizer: () -> Unit, onShuffle: () -> Unit,
         onTrack: (Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
     ) {
         var searchOpen by remember { mutableStateOf(false) }
@@ -421,12 +422,6 @@ class MainActivity : ComponentActivity() {
                 }
             } else LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
                 items(tracks, key = { it.id }) { track -> TrackRow(track, activeId == track.id.toString()) { onTrack(track) } }
-                item {
-                    Spacer(Modifier.height(12.dp))
-                    TextButton(onClick = onSpotify, modifier = Modifier.fillMaxWidth()) {
-                        Text(l("Connect Spotify for artwork & details"), color = muted)
-                    }
-                }
             }
         }
     }
@@ -684,13 +679,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable private fun SettingsPage(onBack: () -> Unit, onDuplicates: () -> Unit,
         modifier: Modifier = Modifier) {
-        val credentials = remember { SpotifyCredentials(this) }
         val playbackPrefs = remember { getSharedPreferences("playback", MODE_PRIVATE) }
-        var clientId by remember { mutableStateOf(credentials.clientId) }
-        var clientSecret by remember { mutableStateOf(credentials.clientSecret) }
-        var accessToken by remember { mutableStateOf(credentials.accessToken) }
-        var connected by remember { mutableStateOf(credentials.connected) }
-        var checking by remember { mutableStateOf(false) }
         var crossfade by remember { mutableFloatStateOf(playbackPrefs.getInt("crossfade", 0).toFloat()) }
         var timerMinutes by remember { mutableFloatStateOf(0f) }
         var selectedLanguage by remember { mutableStateOf(AppLanguage.selected(this)) }
@@ -716,43 +705,6 @@ class MainActivity : ComponentActivity() {
                     HorizontalDivider(color = raised)
                 }
                 item {
-                    Text(l("Spotify"), color = white, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(6.dp))
-                    Text(l("Paste an access token, or enter an app client ID and secret."), color = muted)
-                    Spacer(Modifier.height(10.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.size(9.dp).clip(RoundedCornerShape(50))
-                            .background(if (connected) Color(0xFF77D6A0) else muted))
-                        Spacer(Modifier.width(8.dp))
-                        Text(if (connected) l("Connected") else l("Not connected"), color = if (connected) Color(0xFF77D6A0) else muted)
-                    }
-                }
-                item { OutlinedTextField(clientId, { clientId = it }, label = { Text(l("Client ID")) },
-                    singleLine = true, modifier = Modifier.fillMaxWidth()) }
-                item { OutlinedTextField(clientSecret, { clientSecret = it }, label = { Text(l("Client secret")) },
-                    singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()) }
-                item { OutlinedTextField(accessToken, { accessToken = it }, label = { Text(l("Access token")) },
-                    singleLine = true, visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
-                    modifier = Modifier.fillMaxWidth()) }
-                item {
-                    Button(onClick = {
-                        checking = true
-                        lifecycleScope.launch {
-                            runCatching { credentials.validateAndSave(clientId, clientSecret, accessToken) }
-                                .onSuccess { connected = it; message = if (it) localized("Spotify connected") else localized("Spotify rejected the token") }
-                                .onFailure { message = it.message ?: localized("Spotify validation failed") }
-                            checking = false
-                        }
-                    }, enabled = !checking, modifier = Modifier.fillMaxWidth()) {
-                        Text(if (checking) l("Checking…") else l("Validate & save"))
-                    }
-                    TextButton(onClick = {
-                        credentials.clear(); connected = false
-                        clientId = ""; clientSecret = ""; accessToken = ""
-                    }) { Text(l("Disconnect")) }
-                    HorizontalDivider(color = raised)
-                    Spacer(Modifier.height(20.dp))
                     Text(l("Playback"), color = white, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                     Spacer(Modifier.height(16.dp))
                     Text(stringResource(R.string.crossfade_seconds, crossfade.toInt()), color = white)

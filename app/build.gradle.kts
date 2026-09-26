@@ -35,7 +35,6 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.media3:media3-exoplayer:$media3")
     implementation("androidx.media3:media3-session:$media3")
-    implementation("androidx.security:security-crypto:1.1.0")
     implementation("androidx.palette:palette-ktx:1.0.0")
     implementation("androidx.media3:media3-ui:$media3")
     implementation("androidx.room:room-runtime:$room")
