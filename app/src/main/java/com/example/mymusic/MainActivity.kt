@@ -256,8 +256,7 @@ class MainActivity : ComponentActivity() {
                             onOpen = { page = "player" }, onPlay = togglePlay,
                             onQueue = { page = "queue" },
                             onPrevious = { player?.seekToPreviousMediaItem() },
-                            onNext = { player?.seekToNextMediaItem() },
-                            onOutput = { outputOpen = true })
+                            onNext = { player?.seekToNextMediaItem() })
                         NavigationBar(containerColor = ink, tonalElevation = 0.dp) {
                             listOf(
                                 Triple("library", Icons.Default.LibraryMusic, l("Library")),
@@ -327,6 +326,7 @@ class MainActivity : ComponentActivity() {
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))
                 else -> LibraryPage(visible, tracks.size, query, { query = it },
                     onScan = ::requestOrScan,
+                    onOutput = { outputOpen = true },
                     onSettings = { page = "settings" },
                     onEqualizer = { equalizerReturnPage = "library"; page = "equalizer" },
                     onShuffle = { list -> if (list.isNotEmpty()) { val shuffled = list.shuffled(); playNormal(shuffled, shuffled.first()) } },
@@ -365,7 +365,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable private fun LibraryPage(
         tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
-        onScan: () -> Unit,
+        onScan: () -> Unit, onOutput: () -> Unit,
         onSettings: () -> Unit, onEqualizer: () -> Unit, onShuffle: (List<Track>) -> Unit,
         onTrack: (List<Track>, Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
     ) {
@@ -392,6 +392,7 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onEqualizer) { Icon(Icons.Default.Equalizer, l("Equalizer"), tint = white) }
                 IconButton(onClick = onScan) { Icon(Icons.Default.Refresh, l("Rescan library"), tint = white) }
+                IconButton(onClick = onOutput) { Icon(Icons.Default.Speaker, l("Output device"), tint = white) }
                 IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, l("Settings"), tint = white) }
             }
             if (searchOpen || query.isNotEmpty()) {
@@ -512,8 +513,7 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalFoundationApi::class)
     @Composable private fun MiniPlayer(track: Track, playing: Boolean, position: Long, duration: Long,
         onOpen: () -> Unit, onPlay: () -> Unit, onQueue: () -> Unit,
-        onPrevious: () -> Unit, onNext: () -> Unit,
-        onOutput: () -> Unit) {
+        onPrevious: () -> Unit, onNext: () -> Unit) {
         val view = LocalView.current
         Column(Modifier.fillMaxWidth().background(ink).navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp)) {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(raised)
@@ -572,9 +572,6 @@ class MainActivity : ComponentActivity() {
                 }
                 IconButton(onClick = onNext, modifier = Modifier.size(37.dp)) {
                     Icon(Icons.Default.SkipNext, l("Next"), tint = white)
-                }
-                IconButton(onClick = onOutput, modifier = Modifier.size(37.dp)) {
-                    Icon(Icons.Default.Speaker, l("Output device"), tint = white, modifier = Modifier.size(19.dp))
                 }
             }
             LinearProgressIndicator(progress = { if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f },
