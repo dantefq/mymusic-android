@@ -186,7 +186,6 @@ class MainActivity : ComponentActivity() {
         var waveSeed by remember { mutableIntStateOf(1) }
         var equalizerReturnPage by remember { mutableStateOf("library") }
         var query by remember { mutableStateOf("") }
-        var busy by remember { mutableStateOf(false) }
         var duplicates by remember { mutableStateOf<List<DuplicateGroup>?>(null) }
         var outputOpen by remember { mutableStateOf(false) }
         val snackbar = remember { SnackbarHostState() }
@@ -285,21 +284,13 @@ class MainActivity : ComponentActivity() {
                 } else fadeIn(tween(200)) togetherWith fadeOut(tween(140))
             }) { screen ->
             when (screen) {
-                "player" -> PlayerPage(active, playing, position, duration, busy,
+                "player" -> PlayerPage(active, playing, position, duration,
                     onBack = { page = "library" }, onPlay = togglePlay,
                     onPrevious = { player?.seekToPreviousMediaItem() },
                     onNext = { player?.seekToNextMediaItem() },
                     onSeek = { player?.seekTo(it) },
                     onEqualizer = { equalizerReturnPage = "player"; page = "equalizer" },
-                    onConvert = { active?.let { track ->
-                        busy = true
-                        lifecycleScope.launch {
-                            runCatching { Conversion(this@MainActivity).toFlac(track) }
-                                .onSuccess { message = localized("Verified FLAC saved"); scan() }
-                                .onFailure { message = it.message ?: localized("Conversion failed") }
-                            busy = false
-                        }
-                    } }, modifier = Modifier.padding(inner))
+                    modifier = Modifier.padding(inner))
                 "equalizer" -> EqualizerPage(presets, onBack = { page = equalizerReturnPage },
                     modifier = Modifier.padding(inner))
                 "settings" -> SettingsPage(onBack = { page = "library" },
@@ -579,9 +570,8 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable private fun PlayerPage(track: Track?, playing: Boolean, position: Long, duration: Long,
-        busy: Boolean, onBack: () -> Unit, onPlay: () -> Unit, onPrevious: () -> Unit,
+        onBack: () -> Unit, onPlay: () -> Unit, onPrevious: () -> Unit,
         onNext: () -> Unit, onSeek: (Long) -> Unit, onEqualizer: () -> Unit,
-        onConvert: () -> Unit,
         modifier: Modifier = Modifier) {
         val view = LocalView.current
         var showLyrics by remember(track?.id) { mutableStateOf(false) }
@@ -681,14 +671,6 @@ class MainActivity : ComponentActivity() {
                 PlayerAction(Icons.Default.GraphicEq, l("Equalizer"), onEqualizer)
             }
             Spacer(Modifier.height(17.dp))
-            if (track != null && track.canConvert()) {
-                OutlinedButton(onClick = onConvert, enabled = !busy, modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = accent)) {
-                    Icon(Icons.Default.HighQuality, null, modifier = Modifier.size(19.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text(if (busy) l("Converting & verifying…") else l("Convert to verified FLAC"))
-                }
-            }
             Spacer(Modifier.height(13.dp))
         }
     }
@@ -894,9 +876,6 @@ class MainActivity : ComponentActivity() {
 
 private fun Track.isLossless(): Boolean = mime.contains("flac", true) || mime.contains("wav", true) ||
     mime.contains("alac", true) || mime.contains("aiff", true)
-
-private fun Track.canConvert(): Boolean = mime.contains("wav", true) || mime.contains("alac", true) ||
-    mime.contains("mp4", true) || mime.contains("m4a", true)
 
 private fun formatTime(ms: Long): String {
     val seconds = ms.coerceAtLeast(0) / 1000

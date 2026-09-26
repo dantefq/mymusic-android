@@ -38,8 +38,6 @@
     <string name="ui_choose_a_song_from_your_library">Choose a song from your library</string>
     <string name="ui_lyrics">Lyrics</string>
     <string name="ui_get_details">Get details</string>
-    <string name="ui_convert_to_verified_flac">Convert to verified FLAC</string>
-    <string name="ui_converting_verifying">Converting and verifying…</string>
     <string name="ui_lyrics_are_loading_or_unavailable">Lyrics are loading or unavailable</string>
     <string name="ui_back">Back</string>
     <string name="ui_playback">Playback</string>
@@ -107,8 +105,6 @@
     <string name="ui_player_is_starting_try_again">Player is starting. Try again.</string>
     <string name="ui_track_details_checked">Track details checked</string>
     <string name="ui_metadata_lookup_failed">Metadata lookup failed</string>
-    <string name="ui_verified_flac_saved">Verified FLAC saved</string>
-    <string name="ui_conversion_failed">Conversion failed</string>
     <string name="ui_scanning_files">Scanning files…</string>
     <string name="ui_duplicate_scan_complete">Duplicate scan complete</string>
     <string name="ui_sleep_timer_off">Sleep timer off</string>

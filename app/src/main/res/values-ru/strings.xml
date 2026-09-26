@@ -38,8 +38,6 @@
     <string name="ui_choose_a_song_from_your_library">Выберите песню в медиатеке</string>
     <string name="ui_lyrics">Текст песни</string>
     <string name="ui_get_details">Найти сведения</string>
-    <string name="ui_convert_to_verified_flac">Преобразовать в проверенный FLAC</string>
-    <string name="ui_converting_verifying">Преобразование и проверка…</string>
     <string name="ui_lyrics_are_loading_or_unavailable">Текст загружается или недоступен</string>
     <string name="ui_back">Назад</string>
     <string name="ui_playback">Воспроизведение</string>
@@ -107,8 +105,6 @@
     <string name="ui_player_is_starting_try_again">Плеер запускается. Повторите попытку.</string>
     <string name="ui_track_details_checked">Сведения о песне проверены</string>
     <string name="ui_metadata_lookup_failed">Не удалось найти сведения</string>
-    <string name="ui_verified_flac_saved">Проверенный FLAC сохранён</string>
-    <string name="ui_conversion_failed">Ошибка преобразования</string>
     <string name="ui_scanning_files">Проверка файлов…</string>
     <string name="ui_duplicate_scan_complete">Поиск дубликатов завершён</string>
     <string name="ui_sleep_timer_off">Таймер сна выключен</string>
