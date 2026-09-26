@@ -77,12 +77,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToLong
 
-internal val ink = Color(0xFF0B0D12)
-internal val panel = Color(0xFF171B24)
-internal val raised = Color(0xFF222734)
-internal val accent = Color(0xFFFFB86B)
-internal val muted = Color(0xFF969EAC)
-internal val white = Color(0xFFF4F1EB)
+internal val ink = Color(0xFF0C1018)
+internal val panel = Color(0xFF19212D)
+internal val raised = Color(0xFF293546)
+internal val accent = Color(0xFFFFC178)
+internal val muted = Color(0xFFB5C0CE)
+internal val white = Color(0xFFF7F9FC)
 
 class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context) {
@@ -128,16 +128,18 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         lifecycleScope.launch(Dispatchers.IO) { deleteSharedPreferences("spotify_secure") }
-        window.statusBarColor = android.graphics.Color.rgb(11, 13, 18)
-        window.navigationBarColor = android.graphics.Color.rgb(11, 13, 18)
+        window.statusBarColor = android.graphics.Color.rgb(12, 16, 24)
+        window.navigationBarColor = android.graphics.Color.rgb(12, 16, 24)
         window.decorView.systemUiVisibility = 0
         val future = MediaController.Builder(this, SessionToken(this, android.content.ComponentName(this, PlaybackService::class.java))).buildAsync()
         future.addListener({ runCatching { controller = future.get() }.onFailure { message = it.message ?: localized("Playback unavailable") } },
             ContextCompat.getMainExecutor(this))
         requestOrScan()
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = accent, background = ink, surface = panel,
-                onPrimary = ink, onBackground = white, onSurface = white)) { Screen() }
+            MaterialTheme(colorScheme = darkColorScheme(primary = accent, onPrimary = ink,
+                secondary = muted, onSecondary = ink, background = ink, onBackground = white,
+                surface = panel, onSurface = white, surfaceVariant = raised,
+                onSurfaceVariant = muted, outline = muted, error = Color(0xFFFF8E92))) { Screen() }
         }
     }
 
