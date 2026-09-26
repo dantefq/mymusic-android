@@ -186,7 +186,6 @@ class MainActivity : ComponentActivity() {
         var waveSeed by remember { mutableIntStateOf(1) }
         var equalizerReturnPage by remember { mutableStateOf("library") }
         var query by remember { mutableStateOf("") }
-        var losslessOnly by remember { mutableStateOf(false) }
         var busy by remember { mutableStateOf(false) }
         var duplicates by remember { mutableStateOf<List<DuplicateGroup>?>(null) }
         var outputOpen by remember { mutableStateOf(false) }
@@ -232,8 +231,7 @@ class MainActivity : ComponentActivity() {
         }
         val active = tracks.firstOrNull { it.id.toString() == mediaId }
         val visible = tracks.filter { track ->
-            (track.title.contains(query, true) || track.artist.contains(query, true) || track.album.contains(query, true)) &&
-                (!losslessOnly || track.isLossless())
+            track.title.contains(query, true) || track.artist.contains(query, true) || track.album.contains(query, true)
         }
         val togglePlay: () -> Unit = { player?.let { if (it.isPlaying) it.pause() else it.play() }; Unit }
         val playNormal: (List<Track>, Track) -> Unit = { list, track ->
@@ -336,8 +334,7 @@ class MainActivity : ComponentActivity() {
                 "playlists" -> PlaylistsScreen(db, tracks, playNormal, Modifier.padding(inner))
                 "stats" -> StatsScreen(tracks, plays, Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))
-                else -> LibraryPage(visible, tracks.size, query, { query = it }, losslessOnly,
-                    { losslessOnly = !losslessOnly },
+                else -> LibraryPage(visible, tracks.size, query, { query = it },
                     onScan = ::requestOrScan,
                     onSettings = { page = "settings" },
                     onEqualizer = { equalizerReturnPage = "library"; page = "equalizer" },
@@ -377,7 +374,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable private fun LibraryPage(
         tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
-        losslessOnly: Boolean, onLossless: () -> Unit, onScan: () -> Unit,
+        onScan: () -> Unit,
         onSettings: () -> Unit, onEqualizer: () -> Unit, onShuffle: () -> Unit,
         onTrack: (Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
     ) {
@@ -412,8 +409,7 @@ class MainActivity : ComponentActivity() {
             }
             Spacer(Modifier.height(18.dp))
             Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterPill(l("All songs"), !losslessOnly) { if (losslessOnly) onLossless() }
-                FilterPill(l("Lossless"), losslessOnly) { if (!losslessOnly) onLossless() }
+                FilterPill(l("All songs"), true) {}
             }
             Spacer(Modifier.height(31.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
