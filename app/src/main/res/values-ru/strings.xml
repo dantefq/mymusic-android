@@ -7,6 +7,8 @@
     <string name="ui_library">Медиатека</string>
     <string name="ui_my_wave">Моя волна</string>
     <string name="ui_genres">Жанры</string>
+    <string name="ui_artists">Исполнители</string>
+    <string name="ui_all_tracks">Все треки</string>
     <string name="ui_audiobooks">Аудиокниги</string>
     <string name="ui_playlists">Плейлисты</string>
     <string name="ui_stats">Статистика</string>

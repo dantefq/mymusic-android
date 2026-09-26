@@ -249,7 +249,7 @@ class MainActivity : ComponentActivity() {
             SnackbarHost(snackbar) { data -> Snackbar(data, containerColor = raised, contentColor = white) }
         },
             bottomBar = {
-                if (page in listOf("library", "my_wave", "genres", "audiobooks", "playlists", "stats")) {
+                if (page in listOf("library", "my_wave", "audiobooks", "playlists", "stats")) {
                     Column {
                         if (active != null) MiniPlayer(active, playing, position, duration,
                             onOpen = { page = "player" }, onPlay = togglePlay,
@@ -261,7 +261,6 @@ class MainActivity : ComponentActivity() {
                             listOf(
                                 Triple("library", Icons.Default.LibraryMusic, l("Library")),
                                 Triple("my_wave", Icons.Default.AutoAwesome, l("My Wave")),
-                                Triple("genres", Icons.Default.Category, l("Genres")),
                                 Triple("audiobooks", Icons.Default.MenuBook, l("Audiobooks")),
                                 Triple("playlists", Icons.Default.QueueMusic, l("Playlists")),
                                 Triple("stats", Icons.Default.BarChart, l("Stats"))
@@ -320,18 +319,6 @@ class MainActivity : ComponentActivity() {
                     waveActive = true
                     play(list, track)
                 }, Modifier.padding(inner))
-                "genres" -> GenresScreen(tracks, playNormal,
-                    onFetch = {
-                        lifecycleScope.launch {
-                            message = localized("Fetching genres…")
-                            tracks.filter { it.genre.isBlank() }.forEach { track ->
-                                if (db.tracks().get(track.id)?.genre.isNullOrBlank()) {
-                                    runCatching { metadata.enrich(track) }
-                                }
-                            }
-                            message = localized("Genres updated")
-                        }
-                    }, modifier = Modifier.padding(inner))
                 "audiobooks" -> AudiobooksScreen(tracks, playNormal, Modifier.padding(inner))
                 "playlists" -> PlaylistsScreen(db, tracks, playNormal, Modifier.padding(inner))
                 "stats" -> StatsScreen(tracks, plays, Modifier.padding(inner))
@@ -340,8 +327,8 @@ class MainActivity : ComponentActivity() {
                     onScan = ::requestOrScan,
                     onSettings = { page = "settings" },
                     onEqualizer = { equalizerReturnPage = "library"; page = "equalizer" },
-                    onShuffle = { if (visible.isNotEmpty()) { val shuffled = visible.shuffled(); playNormal(shuffled, shuffled.first()) } },
-                    onTrack = { playNormal(visible, it) },
+                    onShuffle = { list -> if (list.isNotEmpty()) { val shuffled = list.shuffled(); playNormal(shuffled, shuffled.first()) } },
+                    onTrack = playNormal,
                     activeId = mediaId, modifier = Modifier.padding(inner))
             }
             }
@@ -377,10 +364,23 @@ class MainActivity : ComponentActivity() {
     @Composable private fun LibraryPage(
         tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
         onScan: () -> Unit,
-        onSettings: () -> Unit, onEqualizer: () -> Unit, onShuffle: () -> Unit,
-        onTrack: (Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
+        onSettings: () -> Unit, onEqualizer: () -> Unit, onShuffle: (List<Track>) -> Unit,
+        onTrack: (List<Track>, Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
     ) {
         var searchOpen by remember { mutableStateOf(false) }
+        var filter by remember { mutableStateOf("all") }
+        var selectedGroup by remember { mutableStateOf<String?>(null) }
+        val groups = remember(tracks, filter) {
+            when (filter) {
+                "genres" -> tracks.groupBy { it.genre.ifBlank { "Other" } }
+                "artists" -> tracks.groupBy { it.artist.ifBlank { "Unknown" } }
+                else -> emptyMap()
+            }
+        }
+        val shown = if (selectedGroup == null || filter == "all") tracks else groups[selectedGroup].orEmpty()
+        BackHandler(filter != "all") {
+            if (selectedGroup != null) selectedGroup = null else filter = "all"
+        }
         Column(modifier.fillMaxSize()) {
             Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 14.dp, end = 16.dp),
                 verticalAlignment = Alignment.CenterVertically) {
@@ -410,16 +410,22 @@ class MainActivity : ComponentActivity() {
             }
             }
             Spacer(Modifier.height(18.dp))
-            Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterPill(l("All songs"), true) {}
+            LazyRow(contentPadding = PaddingValues(horizontal = 24.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item { FilterPill(l("All Tracks"), filter == "all") { filter = "all"; selectedGroup = null } }
+                item { FilterPill(l("Genres"), filter == "genres") { filter = "genres"; selectedGroup = null } }
+                item { FilterPill(l("Artists"), filter == "artists") { filter = "artists"; selectedGroup = null } }
             }
             Spacer(Modifier.height(31.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
-                    Text(l("Library"), color = white, fontSize = 25.sp, fontWeight = FontWeight.Bold)
-                    Text(stringResource(R.string.songs_on_device, total), color = muted, fontSize = 13.sp)
+                    Text(selectedGroup ?: l("Library"), color = white, fontSize = 25.sp,
+                        fontWeight = FontWeight.Bold)
+                    Text(stringResource(R.string.songs_on_device, if (selectedGroup == null) total else shown.size),
+                        color = muted, fontSize = 13.sp)
                 }
-                FilledIconButton(onClick = onShuffle, enabled = tracks.isNotEmpty(),
+                FilledIconButton(onClick = { onShuffle(shown) }, enabled = shown.isNotEmpty() &&
+                    (filter == "all" || selectedGroup != null),
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = accent, contentColor = ink),
                     modifier = Modifier.size(46.dp)) { Icon(Icons.Default.Shuffle, l("Shuffle play")) }
             }
@@ -439,8 +445,21 @@ class MainActivity : ComponentActivity() {
                         Button(onClick = onScan) { Text(l("Scan music")) }
                     }
                 }
+            } else if (filter != "all" && selectedGroup == null) {
+                LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
+                    items(groups.entries.sortedBy { it.key.lowercase() }) { (name, songs) ->
+                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            .clip(RoundedCornerShape(14.dp)).background(panel)
+                            .clickable { selectedGroup = name }.padding(18.dp)) {
+                            Text(name, color = white, modifier = Modifier.weight(1f))
+                            Text("${songs.size}", color = accent)
+                        }
+                    }
+                }
             } else LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
-                items(tracks, key = { it.id }) { track -> TrackRow(track, activeId == track.id.toString()) { onTrack(track) } }
+                items(shown, key = { it.id }) { track ->
+                    TrackRow(track, activeId == track.id.toString()) { onTrack(shown, track) }
+                }
             }
         }
     }
