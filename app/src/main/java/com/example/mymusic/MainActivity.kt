@@ -183,8 +183,6 @@ class MainActivity : ComponentActivity() {
         var mediaId by remember { mutableStateOf<String?>(null) }
         var playing by remember { mutableStateOf(false) }
         var page by remember { mutableStateOf("library") }
-        var waveActive by remember { mutableStateOf(false) }
-        var waveSeed by remember { mutableIntStateOf(1) }
         var equalizerReturnPage by remember { mutableStateOf("library") }
         var query by remember { mutableStateOf("") }
         var settledQuery by remember { mutableStateOf("") }
@@ -204,20 +202,6 @@ class MainActivity : ComponentActivity() {
             playing = player?.isPlaying == true
             onDispose { player?.removeListener(listener) }
         }
-        LaunchedEffect(mediaId, waveActive, tracks, plays) {
-            if (waveActive && player != null && mediaId != null) {
-                if (player.currentMediaItemIndex > 30) {
-                    player.removeMediaItems(0, player.currentMediaItemIndex - 10)
-                }
-                if (player.mediaItemCount - player.currentMediaItemIndex <= 5) {
-                    val recent = ((player.currentMediaItemIndex - 7).coerceAtLeast(0)..player.currentMediaItemIndex)
-                        .mapNotNull { index -> player.getMediaItemAt(index).mediaId.toLongOrNull() }.toSet()
-                    val mix = myWaveMix(tracks, plays, waveSeed++)
-                    val next = mix.filterNot { it.id in recent }.ifEmpty { mix }.take(20)
-                    player.addMediaItems(next.map(::mediaItem))
-                }
-            }
-        }
         LaunchedEffect(message) {
             if (message.isNotBlank()) { snackbar.showSnackbar(message); message = "" }
         }
@@ -232,7 +216,6 @@ class MainActivity : ComponentActivity() {
         } }
         val togglePlay: () -> Unit = { player?.let { if (it.isPlaying) it.pause() else it.play() }; Unit }
         val playNormal: (List<Track>, Track) -> Unit = { list, track ->
-            waveActive = false
             if (settledQuery.isNotBlank()) {
                 play(listOf(track) + randomContinuation(tracks, track.id), track, "random")
             } else play(list, track)
@@ -249,7 +232,7 @@ class MainActivity : ComponentActivity() {
             SnackbarHost(snackbar) { data -> Snackbar(data, containerColor = raised, contentColor = white) }
         },
             bottomBar = {
-                if (page in listOf("library", "my_wave", "audiobooks", "playlists")) {
+                if (page in listOf("library", "audiobooks", "playlists", "stats")) {
                     Column {
                         if (active != null) PlaybackProgress(player) { position, duration -> MiniPlayer(active, playing, position, duration,
                             onOpen = { page = "player" }, onPlay = togglePlay,
@@ -259,8 +242,7 @@ class MainActivity : ComponentActivity() {
                         NavigationBar(containerColor = ink, tonalElevation = 0.dp) {
                             listOf(
                                 Triple("library", Icons.Default.LibraryMusic, l("Library")),
-                                Triple("my_wave", Icons.Default.AutoAwesome, l("My Wave")),
-                                Triple("audiobooks", Icons.Default.MenuBook, l("Audiobooks")),
+                                Triple("stats", Icons.Default.BarChart, l("Stats")),
                                 Triple("playlists", Icons.Default.QueueMusic, l("Playlists"))
                             ).forEach { (destination, icon, label) ->
                                 NavigationBarItem(selected = page == destination,
@@ -294,6 +276,7 @@ class MainActivity : ComponentActivity() {
                 "equalizer" -> EqualizerPage(presets, onBack = { page = equalizerReturnPage },
                     modifier = Modifier.padding(inner))
                 "settings" -> SettingsPage(onBack = { page = "library" },
+                    onAudiobooks = { page = "audiobooks" },
                     onDuplicates = { page = "duplicates" }, onStats = { page = "stats" },
                     modifier = Modifier.padding(inner))
                 "duplicates" -> DuplicatesScreen(duplicates, onScan = {
@@ -306,16 +289,16 @@ class MainActivity : ComponentActivity() {
                     val request = MediaStore.createDeleteRequest(contentResolver, listOf(Uri.parse(track.uri)))
                     deleteDuplicate.launch(IntentSenderRequest.Builder(request.intentSender).build())
                 }, modifier = Modifier.padding(inner))
-                "my_wave" -> MyWaveScreen(tracks, plays, { list, track ->
-                    waveActive = true
-                    play(list, track)
-                }, Modifier.padding(inner))
                 "audiobooks" -> AudiobooksScreen(tracks, playNormal, Modifier.padding(inner))
                 "playlists" -> PlaylistsScreen(db, tracks, playNormal, Modifier.padding(inner))
                 "stats" -> StatsScreen(tracks, plays, onBack = { page = "settings" },
                     modifier = Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))
                 else -> LibraryPage(visible, tracks.size, query, { query = it },
+                    onSmartPlay = {
+                        val mix = myWaveMix(tracks.filterNot { it.isAudiobook }, plays, kotlin.random.Random.nextInt()).take(20)
+                        if (mix.isNotEmpty()) play(mix, mix.first(), "smart")
+                    },
                     onScan = { requestOrScan(true) },
                     onOutput = { outputOpen = true },
                     onSettings = { page = "settings" },
@@ -355,6 +338,7 @@ class MainActivity : ComponentActivity() {
 
     @Composable private fun LibraryPage(
         tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
+        onSmartPlay: () -> Unit,
         onScan: () -> Unit, onOutput: () -> Unit,
         onSettings: () -> Unit, onShuffle: (List<Track>) -> Unit,
         onTrack: (List<Track>, Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
@@ -403,6 +387,11 @@ class MainActivity : ComponentActivity() {
             }
             } }
             Spacer(Modifier.height(18.dp))
+            Button(onClick = onSmartPlay, enabled = total > 0, modifier = Modifier.padding(horizontal = 24.dp)) {
+                Icon(Icons.Default.AutoAwesome, null)
+                Spacer(Modifier.width(8.dp))
+                Text(l("Smart play"))
+            }
             LazyRow(contentPadding = PaddingValues(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item { FilterPill(l("All Tracks"), filter == "all") { filter = "all"; selectedGroup = null } }
@@ -732,6 +721,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable private fun SettingsPage(onBack: () -> Unit, onDuplicates: () -> Unit,
+        onAudiobooks: () -> Unit,
         onStats: () -> Unit,
         modifier: Modifier = Modifier) {
         val playbackPrefs = remember { getSharedPreferences("playback", MODE_PRIVATE) }
@@ -742,6 +732,7 @@ class MainActivity : ComponentActivity() {
             PageHeader(l("Settings"), onBack)
             LazyColumn(contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                 item { AppearanceSettings() }
+                item { OutlinedButton(onClick = onAudiobooks, modifier = Modifier.fillMaxWidth()) { Text(l("Audiobooks")) } }
                 item {
                     Text(l("Language"), color = white, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                     listOf("" to l("System default"), "en" to "English", "ru" to "Русский").forEach { (tag, label) ->
@@ -908,3 +899,4 @@ private fun parseLrc(value: String): List<Pair<Long, String>> {
         ((minute * 60 + second) * 1000 + fraction) to line.substring(match.range.last + 1).trim()
     }.filter { it.second.isNotEmpty() }.sortedBy { it.first }.toList()
 }
+

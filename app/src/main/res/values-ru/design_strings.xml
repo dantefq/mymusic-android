@@ -12,5 +12,6 @@
     <string name="ui_mono">Моноширинный</string>
     <string name="ui_live_preview">Предпросмотр</string>
     <string name="ui_your_music_your_style">Ваша музыка, ваш стиль</string>
-</resources>
+<string name="ui_smart_play">Умный микс</string></resources>
+
 

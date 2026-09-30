@@ -50,6 +50,7 @@ data class Track(
 data class PlayEvent(@PrimaryKey(autoGenerate = true) val id: Long = 0, val trackId: Long, val playedAt: Long)
 
 @Dao interface PlayDao {
+    @Query("SELECT * FROM plays WHERE playedAt >= :since ORDER BY playedAt DESC") suspend fun since(since: Long): List<PlayEvent>
     @Insert suspend fun put(event: PlayEvent)
     @Query("SELECT * FROM plays WHERE playedAt >= :since ORDER BY playedAt DESC") fun observeSince(since: Long): Flow<List<PlayEvent>>
     @Query("SELECT trackId, COUNT(*) AS count FROM plays GROUP BY trackId ORDER BY count DESC LIMIT :limit")

@@ -97,13 +97,20 @@ class PlaybackService : MediaSessionService() {
             val prefs = getSharedPreferences("playback", MODE_PRIVATE)
             while (true) {
                 if (player.isPlaying) snapshot.savePosition(player)
-                if (prefs.getString("queue_mode", "off") == "random" && player.mediaItemCount > 0 &&
+                val queueMode = prefs.getString("queue_mode", "off")
+                if (queueMode in listOf("random", "smart") && player.mediaItemCount > 0 &&
                     player.mediaItemCount - player.currentMediaItemIndex <= 3) {
                     val currentId = player.currentMediaItem?.mediaId
                     val next = withContext(Dispatchers.IO) {
-                        randomContinuation(MusicDb.get(this@PlaybackService).tracks().all(), currentId?.toLongOrNull())
+                        val db = MusicDb.get(this@PlaybackService)
+                        val tracks = db.tracks().all().filterNot { it.isAudiobook }
+                        if (queueMode == "smart") {
+                            val history = db.plays().since(System.currentTimeMillis() - 90L * 86400000)
+                            myWaveMix(tracks, history, kotlin.random.Random.nextInt())
+                                .filterNot { it.id.toString() == currentId }.ifEmpty { tracks }.take(20)
+                        } else randomContinuation(tracks, currentId?.toLongOrNull())
                     }
-                    if (prefs.getString("queue_mode", "off") == "random" && player.currentMediaItem?.mediaId == currentId) {
+                    if (prefs.getString("queue_mode", "off") == queueMode && player.currentMediaItem?.mediaId == currentId) {
                         if (player.currentMediaItemIndex > 30) player.removeMediaItems(0, player.currentMediaItemIndex - 10)
                         player.addMediaItems(next.map { track ->
                             MediaItem.Builder().setMediaId(track.id.toString()).setUri(track.uri)
