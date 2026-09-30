@@ -12,7 +12,12 @@
     <string name="ui_mono">Моноширинный</string>
     <string name="ui_live_preview">Предпросмотр</string>
     <string name="ui_your_music_your_style">Ваша музыка, ваш стиль</string>
-<string name="ui_smart_play">Умный микс</string><string name="ui_show_all">Показать всё</string><string name="ui_collapse">Свернуть</string></resources>
+<string name="ui_smart_play">Умный микс</string><string name="ui_show_all">Показать всё</string><string name="ui_collapse">Свернуть</string><string name="ui_go_to_album">К альбому</string>
+<string name="ui_track_options">Действия с песней</string>
+<string name="ui_album">Альбом</string>
+<string name="ui_unknown_album">Неизвестный альбом</string>
+</resources>
+
 
 
 

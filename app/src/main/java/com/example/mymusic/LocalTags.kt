@@ -12,7 +12,9 @@ data class LocalTags(
     val album: String? = null,
     val artUri: String? = null,
     val lyrics: String? = null,
-    val genre: String? = null
+    val genre: String? = null,
+    val albumArtist: String? = null,
+    val trackNumber: Int? = null
 )
 
 internal fun String?.tagValue(): String? = this?.trim()?.takeIf {
@@ -33,7 +35,9 @@ class LocalTagReader(private val context: Context) {
                     retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM).tagValue(),
                     picture?.takeIf { it.size <= 8_000_000 }?.let { cacheCover(id, it) },
                     null,
-                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE).tagValue()
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE).tagValue(),
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST).tagValue(),
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)?.substringBefore('/')?.toIntOrNull()
                 )
             } finally { retriever.release() }
         }.getOrDefault(LocalTags())
@@ -43,7 +47,9 @@ class LocalTagReader(private val context: Context) {
             embedded.album ?: sidecar.album,
             embedded.artUri ?: sidecar.artUri,
             sidecar.lyrics,
-            embedded.genre ?: sidecar.genre
+            embedded.genre ?: sidecar.genre,
+            embedded.albumArtist ?: sidecar.albumArtist,
+            embedded.trackNumber ?: sidecar.trackNumber
         )
     }
 
@@ -62,7 +68,9 @@ class LocalTagReader(private val context: Context) {
             json?.optString("title").tagValue(), json?.optString("artist").tagValue(),
             json?.optString("album").tagValue(), cover?.let { Uri.fromFile(it).toString() },
             lyrics.tagValue() ?: json?.optString("lyrics").tagValue(),
-            json?.optString("genre").tagValue()
+            json?.optString("genre").tagValue(),
+            json?.optString("albumArtist").tagValue(),
+            json?.optInt("trackNumber")?.takeIf { it > 0 }
         )
     }
 

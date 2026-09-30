@@ -176,6 +176,7 @@ class MainActivity : ComponentActivity() {
         .setMediaMetadata(MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
             .setAlbumTitle(track.album).setArtworkUri(track.artUri?.let(Uri::parse)).build()).build()
 
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable private fun Screen() {
         val tracks by remember { db.tracks().observe().distinctUntilChanged() }.collectAsStateWithLifecycle(emptyList())
         val presets by remember { db.eq().observe() }.collectAsStateWithLifecycle(emptyList())
@@ -189,6 +190,8 @@ class MainActivity : ComponentActivity() {
         var settledQuery by remember { mutableStateOf("") }
         var duplicates by remember { mutableStateOf<List<DuplicateGroup>?>(null) }
         var outputOpen by remember { mutableStateOf(false) }
+        var trackOptions by remember { mutableStateOf<Track?>(null) }
+        var selectedAlbum by rememberSaveable { mutableStateOf("") }
         val snackbar = remember { SnackbarHostState() }
 
         DisposableEffect(player) {
@@ -233,7 +236,7 @@ class MainActivity : ComponentActivity() {
             SnackbarHost(snackbar) { data -> Snackbar(data, containerColor = raised, contentColor = white) }
         },
             bottomBar = {
-                if (page in listOf("library", "audiobooks", "playlists", "stats")) {
+                if (page in listOf("library", "audiobooks", "playlists", "stats", "album", "artist")) {
                     Column {
                         if (active != null) PlaybackProgress(player) { position, duration -> MiniPlayer(active, playing, position, duration,
                             onOpen = { page = "player" }, onPlay = togglePlay,
@@ -268,6 +271,7 @@ class MainActivity : ComponentActivity() {
             }) { screen ->
             when (screen) {
                 "player" -> PlaybackProgress(player) { position, duration -> PlayerPage(active, playing, position, duration,
+                    onOptions = { active?.let { trackOptions = it } },
                     onBack = { page = "library" }, onPlay = togglePlay,
                     onPrevious = { player?.seekToPreviousMediaItem() },
                     onNext = { player?.seekToNextMediaItem() },
@@ -295,7 +299,11 @@ class MainActivity : ComponentActivity() {
                 "stats" -> StatsScreen(tracks, plays, onBack = { page = "settings" },
                     modifier = Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))
+                "album" -> AlbumPage(remember(tracks, selectedAlbum) { albumTracks(tracks, selectedAlbum) },
+                    onBack = { page = "library" }, onPlay = { list, track -> play(list, track) },
+                    onOptions = { trackOptions = it }, modifier = Modifier.padding(inner))
                 else -> LibraryPage(visible, tracks.size, query, { query = it },
+                    onOptions = { trackOptions = it },
                     onSmartPlay = {
                         val mix = myWaveMix(tracks.filterNot { it.isAudiobook }, plays, kotlin.random.Random.nextInt()).take(20)
                         if (mix.isNotEmpty()) play(mix, mix.first(), "smart")
@@ -307,6 +315,17 @@ class MainActivity : ComponentActivity() {
                     onTrack = playNormal,
                     activeId = mediaId, modifier = Modifier.padding(inner))
             }
+            }
+        }
+        trackOptions?.let { selected ->
+            ModalBottomSheet(onDismissRequest = { trackOptions = null }, containerColor = panel) {
+                Column(Modifier.fillMaxWidth().padding(24.dp)) {
+                    Text(selected.title, color = white, fontFamily = headingFont, fontSize = 25.sp)
+                    Text(selected.artist, color = muted)
+                    TextButton(onClick = {
+                        selectedAlbum = albumKey(selected); query = ""; trackOptions = null; page = "album"
+                    }) { Text(l("Go to album")) }
+                }
             }
         }
         if (outputOpen) {
@@ -340,6 +359,7 @@ class MainActivity : ComponentActivity() {
     @Composable private fun LibraryPage(
         tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
         onSmartPlay: () -> Unit, onScan: () -> Unit, onOutput: () -> Unit,
+        onOptions: (Track) -> Unit,
         onSettings: () -> Unit, onShuffle: (List<Track>) -> Unit,
         onTrack: (List<Track>, Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
     ) {
@@ -380,7 +400,7 @@ class MainActivity : ComponentActivity() {
                         Button(onClick = { onShuffle(shown) }, enabled = shown.isNotEmpty()) { Text(l("Shuffle play")) }
                     }
                     items(shown, key = { "group_${it.id}" }, contentType = { "track" }) { track ->
-                        TrackRow(track, activeId == track.id.toString()) { onTrack(shown, track) }
+                        TrackRow(track, activeId == track.id.toString(), onOptions = { onOptions(track) }) { onTrack(shown, track) }
                     }
                 } else {
                     item("smart") {
@@ -394,7 +414,7 @@ class MainActivity : ComponentActivity() {
                         Text(stringResource(R.string.songs_count, tracks.size), color = muted)
                     }
                     items(if (tracksExpanded || query.isNotBlank()) tracks else tracks.take(5), key = { "track_${it.id}" }, contentType = { "track" }) { track ->
-                        TrackRow(track, activeId == track.id.toString(), Modifier.animateItem()) { onTrack(tracks, track) }
+                        TrackRow(track, activeId == track.id.toString(), Modifier.animateItem(), onOptions = { onOptions(track) }) { onTrack(tracks, track) }
                     }
                     if (tracks.size > 5 && !tracksExpanded && query.isBlank()) item("show_tracks") {
                         TextButton(onClick = { tracksExpanded = true }) { Text(l("Show all") + " · ${tracks.size}") }
@@ -448,9 +468,14 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Composable private fun TrackRow(track: Track, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    @OptIn(ExperimentalFoundationApi::class)
+    @Composable private fun TrackRow(track: Track, active: Boolean, modifier: Modifier = Modifier,
+        onOptions: () -> Unit = {}, onClick: () -> Unit) {
+        val view = LocalView.current
         Row(modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
-            .background(if (active) panel else Color.Transparent).clickable(onClick = onClick)
+            .background(if (active) panel else Color.Transparent).combinedClickable(onClick = onClick, onLongClick = {
+                view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS); onOptions()
+            })
             .padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Artwork(track, Modifier.size(54.dp), 12.dp)
             Spacer(Modifier.width(14.dp))
@@ -468,6 +493,27 @@ class MainActivity : ComponentActivity() {
                     Text(l("LOSSLESS"), color = accent, fontSize = 8.sp, fontWeight = FontWeight.Bold,
                         letterSpacing = 0.7.sp)
                 }
+            }
+            IconButton(onClick = onOptions, modifier = Modifier.size(48.dp)) { Icon(Icons.Default.MoreVert, l("Track options"), tint = muted) }
+        }
+    }
+
+    @Composable private fun AlbumPage(songs: List<Track>, onBack: () -> Unit,
+        onPlay: (List<Track>, Track) -> Unit, onOptions: (Track) -> Unit, modifier: Modifier = Modifier) {
+        val first = songs.firstOrNull()
+        LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp)) {
+            item {
+                PageHeader(l("Album"), onBack)
+                Artwork(first, Modifier.fillMaxWidth().aspectRatio(1f), 18.dp)
+                Spacer(Modifier.height(18.dp))
+                Text(first?.album?.ifBlank { l("Unknown album") } ?: l("Unknown album"), color = white,
+                    fontFamily = headingFont, fontSize = 32.sp)
+                Text(first?.albumArtist?.ifBlank { first.artist }.orEmpty(), color = muted)
+                Text(stringResource(R.string.songs_count, songs.size), color = muted)
+                Button(onClick = { first?.let { onPlay(songs, it) } }, enabled = first != null) { Text(l("Play all")) }
+            }
+            items(songs, key = { it.id }, contentType = { "track" }) { track ->
+                TrackRow(track, false, onOptions = { onOptions(track) }) { onPlay(songs, track) }
             }
         }
     }
@@ -557,6 +603,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable private fun PlayerPage(track: Track?, playing: Boolean, position: Long, duration: Long,
+        onOptions: () -> Unit,
         onBack: () -> Unit, onPlay: () -> Unit, onPrevious: () -> Unit,
         onNext: () -> Unit, onSeek: (Long) -> Unit, onEqualizer: () -> Unit,
         modifier: Modifier = Modifier) {
@@ -598,6 +645,7 @@ class MainActivity : ComponentActivity() {
                 IconButton(onClick = onBack) { Icon(Icons.Default.KeyboardArrowDown, l("Back to library"), tint = white) }
                 Spacer(Modifier.weight(1f))
                 IconButton(onClick = onEqualizer) { Icon(Icons.Default.Equalizer, l("Equalizer"), tint = white) }
+                IconButton(onClick = onOptions) { Icon(Icons.Default.MoreVert, l("Track options"), tint = white) }
             }
             Spacer(Modifier.weight(0.65f))
             AnimatedContent(targetState = showLyrics, label = "player lyrics", transitionSpec = {

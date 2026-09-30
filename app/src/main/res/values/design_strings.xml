@@ -12,7 +12,12 @@
     <string name="ui_mono">Mono</string>
     <string name="ui_live_preview">Live preview</string>
     <string name="ui_your_music_your_style">Your music, your style</string>
-<string name="ui_smart_play">Smart play</string><string name="ui_show_all">Show all</string><string name="ui_collapse">Collapse</string></resources>
+<string name="ui_smart_play">Smart play</string><string name="ui_show_all">Show all</string><string name="ui_collapse">Collapse</string><string name="ui_go_to_album">Go to album</string>
+<string name="ui_track_options">Track options</string>
+<string name="ui_album">Album</string>
+<string name="ui_unknown_album">Unknown album</string>
+</resources>
+
 
 
 
