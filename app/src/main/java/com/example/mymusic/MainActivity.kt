@@ -28,6 +28,9 @@ import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
@@ -378,7 +381,8 @@ class MainActivity : ComponentActivity() {
                 IconButton(onClick = onOutput) { Icon(Icons.Default.Speaker, l("Output device"), tint = white) }
                 IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, l("Settings"), tint = white) }
             }
-            if (searchOpen || query.isNotEmpty()) {
+            AnimatedVisibility(searchOpen || query.isNotEmpty(), enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()) { Column {
             Spacer(Modifier.height(15.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp).height(54.dp)
                 .clip(RoundedCornerShape(17.dp)).background(panel).padding(horizontal = 16.dp),
@@ -394,7 +398,7 @@ class MainActivity : ComponentActivity() {
                     Icon(Icons.Default.Close, l("Clear search"), tint = muted, modifier = Modifier.size(18.dp))
                 }
             }
-            }
+            } }
             Spacer(Modifier.height(18.dp))
             LazyRow(contentPadding = PaddingValues(horizontal = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -553,10 +557,7 @@ class MainActivity : ComponentActivity() {
                     Icon(Icons.Default.SkipPrevious, l("Previous"), tint = white)
                 }
                 IconButton(onClick = onPlay, modifier = Modifier.size(37.dp)) {
-                    AnimatedContent(targetState = playing, label = "mini play") { isPlaying ->
-                        Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            if (isPlaying) l("Pause") else l("Play"), tint = white)
-                    }
+                    PlayPauseGlyph(playing, white)
                 }
                 IconButton(onClick = onNext, modifier = Modifier.size(37.dp)) {
                     Icon(Icons.Default.SkipNext, l("Next"), tint = white)
@@ -658,10 +659,7 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.width(25.dp))
                 FilledIconButton(onClick = onPlay, modifier = Modifier.size(76.dp), enabled = track != null,
                     colors = IconButtonDefaults.filledIconButtonColors(containerColor = accent, contentColor = ink)) {
-                    AnimatedContent(targetState = playing, label = "play pause") { isPlaying ->
-                        Icon(if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            if (isPlaying) l("Pause") else l("Play"), modifier = Modifier.size(37.dp))
-                    }
+                    PlayPauseGlyph(playing, MaterialTheme.colorScheme.onPrimary, Modifier.size(37.dp))
                 }
                 Spacer(Modifier.width(25.dp))
                 IconButton(onClick = onNext, modifier = Modifier.size(62.dp)) {
