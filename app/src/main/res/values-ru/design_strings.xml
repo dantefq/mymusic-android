@@ -19,7 +19,15 @@
 <string name="ui_artist">Исполнитель</string>
 <string name="ui_albums">Альбомы</string>
 <string name="ui_go_to_artist">К исполнителю</string>
+<string name="ui_duration">Длительность</string>
+<string name="ui_ascending">По возрастанию</string>
+<string name="ui_apply">Применить</string>
+<string name="ui_all_audio">Все форматы</string>
+<string name="ui_date_added">Дата добавления</string>
+<string name="ui_descending">По убыванию</string>
+<string name="ui_sort_and_filter">Сортировка и фильтр</string>
 </resources>
+
 
 
 

@@ -19,7 +19,15 @@
 <string name="ui_artist">Artist</string>
 <string name="ui_albums">Albums</string>
 <string name="ui_go_to_artist">Go to artist</string>
+<string name="ui_duration">Duration</string>
+<string name="ui_ascending">Ascending</string>
+<string name="ui_apply">Apply</string>
+<string name="ui_all_audio">All audio</string>
+<string name="ui_date_added">Date added</string>
+<string name="ui_descending">Descending</string>
+<string name="ui_sort_and_filter">Sort and filter</string>
 </resources>
+
 
 
 

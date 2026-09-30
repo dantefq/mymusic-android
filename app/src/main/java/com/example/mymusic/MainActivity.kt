@@ -371,7 +371,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable private fun LibraryPage(
-        tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
+        libraryTracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
         onSmartPlay: () -> Unit, onScan: () -> Unit, onOutput: () -> Unit,
         onOptions: (Track) -> Unit,
         onArtist: (String) -> Unit,
@@ -384,6 +384,16 @@ class MainActivity : ComponentActivity() {
         var tracksExpanded by rememberSaveable { mutableStateOf(false) }
         var artistsExpanded by rememberSaveable { mutableStateOf(false) }
         var genresExpanded by rememberSaveable { mutableStateOf(false) }
+        val preferences = remember { getSharedPreferences("library_view", MODE_PRIVATE) }
+        var sortField by remember { mutableStateOf(preferences.getString("sort", "Name").orEmpty()) }
+        var descending by remember { mutableStateOf(preferences.getBoolean("descending", false)) }
+        var lossless by remember { mutableStateOf(preferences.getBoolean("lossless", false)) }
+        var sortOpen by remember { mutableStateOf(false) }
+        val tracks = remember(libraryTracks, sortField, descending, lossless) { sortedTracks(libraryTracks, sortField, descending, lossless) }
+        if (sortOpen) SortSheet(sortField, descending, lossless, onDismiss = { sortOpen = false }) { field, reverse, onlyLossless ->
+            sortField = field; descending = reverse; lossless = onlyLossless; sortOpen = false
+            preferences.edit().putString("sort", field).putBoolean("descending", reverse).putBoolean("lossless", onlyLossless).apply()
+        }
         val artists = remember(tracks) { artistsForLibrary(tracks) }
         val genres = remember(tracks) { tracks.groupBy { it.genre.ifBlank { "Other" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER) }
         val shown = when (groupKind) {
@@ -425,7 +435,10 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.height(16.dp))
                     }
                     item("tracks_header") {
-                        SectionTitle(l("All Tracks"), tracksExpanded) { tracksExpanded = !tracksExpanded }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.weight(1f)) { SectionTitle(l("All Tracks"), tracksExpanded) { tracksExpanded = !tracksExpanded } }
+                            IconButton(onClick = { sortOpen = true }) { Icon(Icons.Default.Sort, l("Sort and filter"), tint = accent) }
+                        }
                         Text(stringResource(R.string.songs_count, tracks.size), color = muted)
                     }
                     items(if (tracksExpanded || query.isNotBlank()) tracks else tracks.take(5), key = { "track_${it.id}" }, contentType = { "track" }) { track ->
@@ -970,7 +983,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-private fun Track.isLossless(): Boolean = mime.contains("flac", true) || mime.contains("wav", true) ||
+internal fun Track.isLossless(): Boolean = mime.contains("flac", true) || mime.contains("wav", true) ||
     mime.contains("alac", true) || mime.contains("aiff", true)
 
 private fun formatTime(ms: Long): String {
@@ -988,5 +1001,6 @@ private fun parseLrc(value: String): List<Pair<Long, String>> {
         ((minute * 60 + second) * 1000 + fraction) to line.substring(match.range.last + 1).trim()
     }.filter { it.second.isNotEmpty() }.sortedBy { it.first }.toList()
 }
+
 
 
