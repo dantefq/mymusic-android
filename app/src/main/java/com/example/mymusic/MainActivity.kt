@@ -80,13 +80,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToLong
 
-internal val ink = Color(0xFF0C1018)
-internal val panel = Color(0xFF19212D)
-internal val raised = Color(0xFF293546)
-internal val accent = Color(0xFFFFC178)
-internal val muted = Color(0xFFB5C0CE)
-internal val white = Color(0xFFF7F9FC)
-
 class MainActivity : ComponentActivity() {
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguage.wrap(newBase))
@@ -142,10 +135,7 @@ class MainActivity : ComponentActivity() {
             ContextCompat.getMainExecutor(this))
         requestOrScan()
         setContent {
-            MaterialTheme(colorScheme = darkColorScheme(primary = accent, onPrimary = ink,
-                secondary = muted, onSecondary = ink, background = ink, onBackground = white,
-                surface = panel, onSurface = white, surfaceVariant = raised,
-                onSurfaceVariant = muted, outline = muted, error = Color(0xFFFF8E92))) { Screen() }
+            MyMusicTheme { Screen() }
         }
     }
 
