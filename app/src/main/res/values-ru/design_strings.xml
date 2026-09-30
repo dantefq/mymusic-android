@@ -16,7 +16,11 @@
 <string name="ui_track_options">Действия с песней</string>
 <string name="ui_album">Альбом</string>
 <string name="ui_unknown_album">Неизвестный альбом</string>
+<string name="ui_artist">Исполнитель</string>
+<string name="ui_albums">Альбомы</string>
+<string name="ui_go_to_artist">К исполнителю</string>
 </resources>
+
 
 
 

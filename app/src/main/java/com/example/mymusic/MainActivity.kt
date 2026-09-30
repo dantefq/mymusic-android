@@ -192,6 +192,7 @@ class MainActivity : ComponentActivity() {
         var outputOpen by remember { mutableStateOf(false) }
         var trackOptions by remember { mutableStateOf<Track?>(null) }
         var selectedAlbum by rememberSaveable { mutableStateOf("") }
+        var selectedArtist by rememberSaveable { mutableStateOf("") }
         val snackbar = remember { SnackbarHostState() }
 
         DisposableEffect(player) {
@@ -300,9 +301,16 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))
                 "album" -> AlbumPage(remember(tracks, selectedAlbum) { albumTracks(tracks, selectedAlbum) },
+                    onArtist = { selectedArtist = it; page = "artist" },
                     onBack = { page = "library" }, onPlay = { list, track -> play(list, track) },
                     onOptions = { trackOptions = it }, modifier = Modifier.padding(inner))
+                "artist" -> ArtistPage(selectedArtist, remember(tracks, selectedArtist) {
+                    tracks.filter { it.artist.equals(selectedArtist, true) }
+                }, onBack = { page = "library" }, onPlay = { list, track -> play(list, track) },
+                    onAlbum = { selectedAlbum = it; page = "album" }, onOptions = { trackOptions = it },
+                    modifier = Modifier.padding(inner))
                 else -> LibraryPage(visible, tracks.size, query, { query = it },
+                    onArtist = { selectedArtist = it; query = ""; page = "artist" },
                     onOptions = { trackOptions = it },
                     onSmartPlay = {
                         val mix = myWaveMix(tracks.filterNot { it.isAudiobook }, plays, kotlin.random.Random.nextInt()).take(20)
@@ -325,6 +333,9 @@ class MainActivity : ComponentActivity() {
                     TextButton(onClick = {
                         selectedAlbum = albumKey(selected); query = ""; trackOptions = null; page = "album"
                     }) { Text(l("Go to album")) }
+                    TextButton(onClick = {
+                        selectedArtist = selected.artist; query = ""; trackOptions = null; page = "artist"
+                    }) { Text(l("Go to artist")) }
                 }
             }
         }
@@ -360,6 +371,7 @@ class MainActivity : ComponentActivity() {
         tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
         onSmartPlay: () -> Unit, onScan: () -> Unit, onOutput: () -> Unit,
         onOptions: (Track) -> Unit,
+        onArtist: (String) -> Unit,
         onSettings: () -> Unit, onShuffle: (List<Track>) -> Unit,
         onTrack: (List<Track>, Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
     ) {
@@ -428,7 +440,7 @@ class MainActivity : ComponentActivity() {
                         SectionTitle(l("Artists"), artistsExpanded) { artistsExpanded = !artistsExpanded }
                     }
                     items(if (artistsExpanded) artists.entries.toList() else artists.entries.take(3), key = { "artist_${it.key}" }, contentType = { "group" }) { (name, songs) ->
-                        Row(Modifier.fillMaxWidth().clickable { groupKind = "artist"; groupName = name }.padding(vertical = 12.dp),
+                        Row(Modifier.fillMaxWidth().clickable { onArtist(name) }.padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Artwork(songs.firstOrNull(), Modifier.size(48.dp), 24.dp)
                             Spacer(Modifier.width(12.dp))
@@ -499,6 +511,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable private fun AlbumPage(songs: List<Track>, onBack: () -> Unit,
+        onArtist: (String) -> Unit,
         onPlay: (List<Track>, Track) -> Unit, onOptions: (Track) -> Unit, modifier: Modifier = Modifier) {
         val first = songs.firstOrNull()
         LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp)) {
@@ -508,9 +521,39 @@ class MainActivity : ComponentActivity() {
                 Spacer(Modifier.height(18.dp))
                 Text(first?.album?.ifBlank { l("Unknown album") } ?: l("Unknown album"), color = white,
                     fontFamily = headingFont, fontSize = 32.sp)
-                Text(first?.albumArtist?.ifBlank { first.artist }.orEmpty(), color = muted)
+                Text(first?.albumArtist?.ifBlank { first.artist }.orEmpty(), color = muted,
+                    modifier = Modifier.clickable { first?.let { onArtist(it.artist) } }.padding(vertical = 8.dp))
                 Text(stringResource(R.string.songs_count, songs.size), color = muted)
                 Button(onClick = { first?.let { onPlay(songs, it) } }, enabled = first != null) { Text(l("Play all")) }
+            }
+            items(songs, key = { it.id }, contentType = { "track" }) { track ->
+                TrackRow(track, false, onOptions = { onOptions(track) }) { onPlay(songs, track) }
+            }
+        }
+    }
+
+    @Composable private fun ArtistPage(name: String, songs: List<Track>, onBack: () -> Unit,
+        onPlay: (List<Track>, Track) -> Unit, onAlbum: (String) -> Unit,
+        onOptions: (Track) -> Unit, modifier: Modifier = Modifier) {
+        val albums = remember(songs) { songs.groupBy(::albumKey).entries.toList() }
+        LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(20.dp)) {
+            item {
+                PageHeader(l("Artist"), onBack)
+                Artwork(songs.firstOrNull(), Modifier.fillMaxWidth().aspectRatio(1.8f), 18.dp)
+                Spacer(Modifier.height(18.dp))
+                Text(name, color = white, fontFamily = headingFont, fontSize = 32.sp)
+                Text(stringResource(R.string.songs_count, songs.size), color = muted)
+                Button(onClick = { songs.firstOrNull()?.let { onPlay(songs, it) } }, enabled = songs.isNotEmpty()) { Text(l("Play all")) }
+                Text(l("Albums"), color = white, fontFamily = headingFont, fontSize = 26.sp)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp), contentPadding = PaddingValues(vertical = 12.dp)) {
+                    items(albums, key = { it.key }) { (key, tracks) ->
+                        Column(Modifier.width(130.dp).clickable { onAlbum(key) }) {
+                            Artwork(tracks.first(), Modifier.size(130.dp), 12.dp)
+                            Text(tracks.first().album.ifBlank { l("Unknown album") }, color = white,
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
             }
             items(songs, key = { it.id }, contentType = { "track" }) { track ->
                 TrackRow(track, false, onOptions = { onOptions(track) }) { onPlay(songs, track) }
@@ -676,7 +719,7 @@ class MainActivity : ComponentActivity() {
                 fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(5.dp))
             Text(track?.artist ?: l("Choose a song from your library"), color = muted, fontSize = 16.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
+                maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable(onClick = onOptions))
             Spacer(Modifier.height(20.dp))
             Slider(value = if (duration > 0) position.toFloat().coerceIn(0f, duration.toFloat()) else 0f,
                 onValueChange = { onSeek(it.roundToLong()) }, valueRange = 0f..duration.coerceAtLeast(1).toFloat(),

@@ -16,7 +16,11 @@
 <string name="ui_track_options">Track options</string>
 <string name="ui_album">Album</string>
 <string name="ui_unknown_album">Unknown album</string>
+<string name="ui_artist">Artist</string>
+<string name="ui_albums">Albums</string>
+<string name="ui_go_to_artist">Go to artist</string>
 </resources>
+
 
 
 
