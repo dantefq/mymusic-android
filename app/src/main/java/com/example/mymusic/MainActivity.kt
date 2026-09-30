@@ -47,6 +47,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -345,6 +346,9 @@ class MainActivity : ComponentActivity() {
         var searchOpen by remember { mutableStateOf(false) }
         var groupKind by remember { mutableStateOf("") }
         var groupName by remember { mutableStateOf("") }
+        var tracksExpanded by rememberSaveable { mutableStateOf(false) }
+        var artistsExpanded by rememberSaveable { mutableStateOf(false) }
+        var genresExpanded by rememberSaveable { mutableStateOf(false) }
         val artists = remember(tracks) { tracks.groupBy { it.artist.ifBlank { "Unknown" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER) }
         val genres = remember(tracks) { tracks.groupBy { it.genre.ifBlank { "Other" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER) }
         val shown = when (groupKind) {
@@ -386,11 +390,14 @@ class MainActivity : ComponentActivity() {
                         Spacer(Modifier.height(16.dp))
                     }
                     item("tracks_header") {
-                        Text(l("All Tracks"), color = white, fontFamily = headingFont, fontSize = 28.sp)
+                        SectionTitle(l("All Tracks"), tracksExpanded) { tracksExpanded = !tracksExpanded }
                         Text(stringResource(R.string.songs_count, tracks.size), color = muted)
                     }
-                    items(tracks.take(5), key = { "track_${it.id}" }, contentType = { "track" }) { track ->
-                        TrackRow(track, activeId == track.id.toString()) { onTrack(tracks, track) }
+                    items(if (tracksExpanded || query.isNotBlank()) tracks else tracks.take(5), key = { "track_${it.id}" }, contentType = { "track" }) { track ->
+                        TrackRow(track, activeId == track.id.toString(), Modifier.animateItem()) { onTrack(tracks, track) }
+                    }
+                    if (tracks.size > 5 && !tracksExpanded && query.isBlank()) item("show_tracks") {
+                        TextButton(onClick = { tracksExpanded = true }) { Text(l("Show all") + " · ${tracks.size}") }
                     }
                     if (tracks.isEmpty()) item("empty") {
                         Text(if (total == 0) l("Add music to your phone, then scan again.") else l("No matching songs"),
@@ -398,9 +405,9 @@ class MainActivity : ComponentActivity() {
                     }
                     item("artists_header") {
                         HorizontalDivider(Modifier.padding(vertical = 16.dp), color = raised)
-                        Text(l("Artists"), color = white, fontFamily = headingFont, fontSize = 28.sp)
+                        SectionTitle(l("Artists"), artistsExpanded) { artistsExpanded = !artistsExpanded }
                     }
-                    items(artists.entries.take(3), key = { "artist_${it.key}" }, contentType = { "group" }) { (name, songs) ->
+                    items(if (artistsExpanded) artists.entries.toList() else artists.entries.take(3), key = { "artist_${it.key}" }, contentType = { "group" }) { (name, songs) ->
                         Row(Modifier.fillMaxWidth().clickable { groupKind = "artist"; groupName = name }.padding(vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             Artwork(songs.firstOrNull(), Modifier.size(48.dp), 24.dp)
@@ -411,9 +418,9 @@ class MainActivity : ComponentActivity() {
                     }
                     item("genres_header") {
                         HorizontalDivider(Modifier.padding(vertical = 16.dp), color = raised)
-                        Text(l("Genres"), color = white, fontFamily = headingFont, fontSize = 28.sp)
+                        SectionTitle(l("Genres"), genresExpanded) { genresExpanded = !genresExpanded }
                     }
-                    items(genres.entries.take(3), key = { "genre_${it.key}" }, contentType = { "group" }) { (name, songs) ->
+                    items(if (genresExpanded) genres.entries.toList() else genres.entries.take(3), key = { "genre_${it.key}" }, contentType = { "group" }) { (name, songs) ->
                         Row(Modifier.fillMaxWidth().clickable { groupKind = "genre"; groupName = name }
                             .padding(vertical = 18.dp)) {
                             Text(if (name == "Other") l("Other") else name, color = white, modifier = Modifier.weight(1f))
@@ -431,8 +438,18 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @Composable private fun TrackRow(track: Track, active: Boolean, onClick: () -> Unit) {
-        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
+    @Composable private fun SectionTitle(title: String, expanded: Boolean, onToggle: () -> Unit) {
+        Row(Modifier.fillMaxWidth().clickable(onClick = onToggle), verticalAlignment = Alignment.CenterVertically) {
+            Text(title, fontFamily = headingFont, fontSize = 28.sp, color = white, modifier = Modifier.weight(1f))
+            IconButton(onClick = onToggle) {
+                Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    if (expanded) l("Collapse") else l("Show all"), tint = muted)
+            }
+        }
+    }
+
+    @Composable private fun TrackRow(track: Track, active: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+        Row(modifier.fillMaxWidth().clip(RoundedCornerShape(15.dp))
             .background(if (active) panel else Color.Transparent).clickable(onClick = onClick)
             .padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Artwork(track, Modifier.size(54.dp), 12.dp)
