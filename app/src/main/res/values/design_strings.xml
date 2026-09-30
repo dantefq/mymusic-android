@@ -5,4 +5,12 @@
     <string name="ui_background_color">Background color</string>
     <string name="ui_apply_colors">Apply colors</string>
     <string name="ui_reset_defaults">Reset defaults</string>
+    <string name="ui_font">Font</string>
+    <string name="ui_editorial">Editorial</string>
+    <string name="ui_modern">Modern</string>
+    <string name="ui_rounded">Rounded</string>
+    <string name="ui_mono">Mono</string>
+    <string name="ui_live_preview">Live preview</string>
+    <string name="ui_your_music_your_style">Your music, your style</string>
 </resources>
+

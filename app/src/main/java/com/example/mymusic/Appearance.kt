@@ -13,6 +13,9 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextStyle
+import android.graphics.Typeface
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
@@ -24,6 +27,28 @@ internal val raised: Color @Composable get() = MaterialTheme.colorScheme.surface
 internal val accent: Color @Composable get() = MaterialTheme.colorScheme.primary
 internal val muted: Color @Composable get() = MaterialTheme.colorScheme.onSurfaceVariant
 internal val white: Color @Composable get() = MaterialTheme.colorScheme.onSurface
+internal val headingFont: FontFamily? @Composable get() = MaterialTheme.typography.headlineLarge.fontFamily
+
+private fun chosenFont(name: String): FontFamily = when (name) {
+    "Editorial" -> FontFamily.Serif
+    "Rounded" -> FontFamily(Typeface.create("casual", Typeface.NORMAL))
+    "Mono" -> FontFamily.Monospace
+    else -> FontFamily.SansSerif
+}
+
+private fun appTypography(name: String): Typography {
+    val body = if (name == "Editorial") FontFamily.SansSerif else chosenFont(name)
+    val heading = chosenFont(name)
+    val base = Typography()
+    fun TextStyle.body() = copy(fontFamily = body)
+    fun TextStyle.heading() = copy(fontFamily = heading)
+    return Typography(
+        displayLarge = base.displayLarge.heading(), displayMedium = base.displayMedium.heading(), displaySmall = base.displaySmall.heading(),
+        headlineLarge = base.headlineLarge.heading(), headlineMedium = base.headlineMedium.heading(), headlineSmall = base.headlineSmall.heading(),
+        titleLarge = base.titleLarge.heading(), titleMedium = base.titleMedium.body(), titleSmall = base.titleSmall.body(),
+        bodyLarge = base.bodyLarge.body(), bodyMedium = base.bodyMedium.body(), bodySmall = base.bodySmall.body(),
+        labelLarge = base.labelLarge.body(), labelMedium = base.labelMedium.body(), labelSmall = base.labelSmall.body())
+}
 
 @Composable fun MyMusicTheme(content: @Composable () -> Unit) {
     val prefs = LocalContext.current.getSharedPreferences("appearance", Context.MODE_PRIVATE)
@@ -36,13 +61,14 @@ internal val white: Color @Composable get() = MaterialTheme.colorScheme.onSurfac
     val primary = remember(revision) { parseThemeColor(prefs.getString("accent", "#527BFF").orEmpty()) ?: Color(0xFF527BFF) }
     val background = remember(revision) { parseThemeColor(prefs.getString("background", "#11151B").orEmpty()) ?: Color(0xFF11151B) }
     val foreground = if (background.luminance() > .45f) Color(0xFF151A22) else Color(0xFFF4F0E8)
+    val typography = remember(revision) { appTypography(prefs.getString("font", "Editorial").orEmpty()) }
     MaterialTheme(colorScheme = darkColorScheme(
         primary = primary, onPrimary = if (primary.luminance() > .4f) Color.Black else Color.White,
         background = background, onBackground = foreground,
         surface = lerp(background, foreground, .055f), onSurface = foreground,
         surfaceVariant = lerp(background, foreground, .12f), onSurfaceVariant = lerp(background, foreground, .72f),
         outline = Color(0xFF8D99AA), error = Color(0xFFFF9B9B)
-    ), content = content)
+    ), typography = typography, content = content)
 }
 
 private fun parseThemeColor(value: String): Color? =
@@ -52,7 +78,8 @@ private fun parseThemeColor(value: String): Color? =
     val prefs = LocalContext.current.getSharedPreferences("appearance", Context.MODE_PRIVATE)
     var accentHex by remember { mutableStateOf(prefs.getString("accent", "#527BFF").orEmpty()) }
     var backgroundHex by remember { mutableStateOf(prefs.getString("background", "#11151B").orEmpty()) }
-    Text(l("Appearance"), fontSize = 25.sp, color = white)
+    var font by remember { mutableStateOf(prefs.getString("font", "Editorial").orEmpty()) }
+    Text(l("Appearance"), fontSize = 25.sp, color = white, fontFamily = headingFont)
     Text(l("Customize colors and type"), color = muted)
     Spacer(Modifier.height(12.dp))
     ColorSetting(l("Accent color"), accentHex, listOf("#527BFF", "#FF987F", "#72D6BA")) { accentHex = it }
@@ -61,8 +88,26 @@ private fun parseThemeColor(value: String): Color? =
         prefs.edit().putString("accent", accentHex).putString("background", backgroundHex).apply()
     }, enabled = parseThemeColor(accentHex) != null && parseThemeColor(backgroundHex) != null,
         modifier = Modifier.fillMaxWidth()) { Text(l("Apply colors")) }
+    Text(l("Font"), color = white, fontFamily = headingFont, fontSize = 22.sp)
+    listOf("Editorial", "Modern", "Rounded", "Mono").forEach { name ->
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            RadioButton(selected = font == name, onClick = {
+                font = name; prefs.edit().putString("font", name).apply()
+            })
+            TextButton(onClick = { font = name; prefs.edit().putString("font", name).apply() }) {
+                Text(l(name), fontFamily = chosenFont(name), color = white)
+            }
+        }
+    }
+    Text(l("Live preview"), color = muted)
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp)) {
+            Text("MyMusic", style = MaterialTheme.typography.headlineMedium)
+            Text(l("Your music, your style"))
+        }
+    }
     TextButton(onClick = {
-        accentHex = "#527BFF"; backgroundHex = "#11151B"
+        accentHex = "#527BFF"; backgroundHex = "#11151B"; font = "Editorial"
         prefs.edit().remove("accent").remove("background").remove("font").apply()
     }) { Text(l("Reset defaults")) }
     HorizontalDivider(color = raised)
