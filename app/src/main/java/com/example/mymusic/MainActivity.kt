@@ -338,114 +338,92 @@ class MainActivity : ComponentActivity() {
 
     @Composable private fun LibraryPage(
         tracks: List<Track>, total: Int, query: String, onQuery: (String) -> Unit,
-        onSmartPlay: () -> Unit,
-        onScan: () -> Unit, onOutput: () -> Unit,
+        onSmartPlay: () -> Unit, onScan: () -> Unit, onOutput: () -> Unit,
         onSettings: () -> Unit, onShuffle: (List<Track>) -> Unit,
         onTrack: (List<Track>, Track) -> Unit, activeId: String?, modifier: Modifier = Modifier
     ) {
         var searchOpen by remember { mutableStateOf(false) }
-        var filter by remember { mutableStateOf("all") }
-        var selectedGroup by remember { mutableStateOf<String?>(null) }
-        val groups = remember(tracks, filter) {
-            when (filter) {
-                "genres" -> tracks.groupBy { it.genre.ifBlank { "Other" } }
-                "artists" -> tracks.groupBy { it.artist.ifBlank { "Unknown" } }
-                else -> emptyMap()
-            }
+        var groupKind by remember { mutableStateOf("") }
+        var groupName by remember { mutableStateOf("") }
+        val artists = remember(tracks) { tracks.groupBy { it.artist.ifBlank { "Unknown" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER) }
+        val genres = remember(tracks) { tracks.groupBy { it.genre.ifBlank { "Other" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER) }
+        val shown = when (groupKind) {
+            "artist" -> artists[groupName].orEmpty()
+            "genre" -> genres[groupName].orEmpty()
+            else -> tracks
         }
-        val shown = if (selectedGroup == null || filter == "all") tracks else groups[selectedGroup].orEmpty()
-        BackHandler(filter != "all") {
-            if (selectedGroup != null) selectedGroup = null else filter = "all"
-        }
+        BackHandler(groupKind.isNotEmpty()) { groupKind = "" }
         Column(modifier.fillMaxSize()) {
-            Row(Modifier.fillMaxWidth().padding(start = 16.dp, top = 14.dp, end = 16.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { searchOpen = !searchOpen }) {
-                    Icon(Icons.Default.Search, l("Search"), tint = white)
-                }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                if (groupKind.isNotEmpty()) IconButton(onClick = { groupKind = "" }) { Icon(Icons.Default.ArrowBack, l("Back")) }
+                else IconButton(onClick = { searchOpen = !searchOpen }) { Icon(Icons.Default.Search, l("Search")) }
                 Spacer(Modifier.weight(1f))
-                IconButton(onClick = onScan) { Icon(Icons.Default.Refresh, l("Rescan library"), tint = white) }
-                IconButton(onClick = onOutput) { Icon(Icons.Default.Speaker, l("Output device"), tint = white) }
-                IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, l("Settings"), tint = white) }
+                IconButton(onClick = onScan) { Icon(Icons.Default.Refresh, l("Rescan library")) }
+                IconButton(onClick = onOutput) { Icon(Icons.Default.Speaker, l("Output device")) }
+                IconButton(onClick = onSettings) { Icon(Icons.Default.Settings, l("Settings")) }
             }
-            AnimatedVisibility(searchOpen || query.isNotEmpty(), enter = expandVertically() + fadeIn(),
-                exit = shrinkVertically() + fadeOut()) { Column {
-            Spacer(Modifier.height(15.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp).height(54.dp)
-                .clip(RoundedCornerShape(17.dp)).background(panel).padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.Search, null, tint = muted)
-                Spacer(Modifier.width(12.dp))
-                Box(Modifier.weight(1f)) {
-                    if (query.isEmpty()) Text(l("Search songs, artists, albums"), color = muted, fontSize = 14.sp)
-                    BasicTextField(query, onQuery, singleLine = true, textStyle = TextStyle(
-                        color = white, fontSize = 14.sp), modifier = Modifier.fillMaxWidth())
-                }
-                if (query.isNotEmpty()) IconButton(onClick = { onQuery("") }, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.Close, l("Clear search"), tint = muted, modifier = Modifier.size(18.dp))
-                }
+            AnimatedVisibility(searchOpen || query.isNotBlank(), enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
+                OutlinedTextField(query, onQuery, singleLine = true, placeholder = { Text(l("Search songs, artists, albums")) },
+                    trailingIcon = { IconButton(onClick = { onQuery("") }) { Icon(Icons.Default.Close, l("Clear search")) } },
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp))
             }
-            } }
-            Spacer(Modifier.height(18.dp))
-            Button(onClick = onSmartPlay, enabled = total > 0, modifier = Modifier.padding(horizontal = 24.dp)) {
-                Icon(Icons.Default.AutoAwesome, null)
-                Spacer(Modifier.width(8.dp))
-                Text(l("Smart play"))
-            }
-            LazyRow(contentPadding = PaddingValues(horizontal = 24.dp),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                item { FilterPill(l("All Tracks"), filter == "all") { filter = "all"; selectedGroup = null } }
-                item { FilterPill(l("Genres"), filter == "genres") { filter = "genres"; selectedGroup = null } }
-                item { FilterPill(l("Artists"), filter == "artists") { filter = "artists"; selectedGroup = null } }
-            }
-            Spacer(Modifier.height(31.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(selectedGroup ?: l("Library"), color = white, fontSize = 25.sp,
-                        fontWeight = FontWeight.Bold)
-                    Text(stringResource(R.string.songs_on_device, if (selectedGroup == null) total else shown.size),
-                        color = muted, fontSize = 13.sp)
-                }
-                FilledIconButton(onClick = { onShuffle(shown) }, enabled = shown.isNotEmpty() &&
-                    (filter == "all" || selectedGroup != null),
-                    colors = IconButtonDefaults.filledIconButtonColors(containerColor = accent, contentColor = ink),
-                    modifier = Modifier.size(46.dp)) { Icon(Icons.Default.Shuffle, l("Shuffle play")) }
-            }
-            Spacer(Modifier.height(15.dp))
-            if (tracks.isEmpty()) {
-                Column(Modifier.fillMaxSize().padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center) {
-                    Icon(Icons.Default.LibraryMusic, null, tint = accent, modifier = Modifier.size(56.dp))
-                    Spacer(Modifier.height(14.dp))
-                    Text(if (total == 0) l("Your library is waiting") else l("No matching songs"), color = white,
-                        fontSize = 20.sp, fontWeight = FontWeight.SemiBold)
-                    Spacer(Modifier.height(7.dp))
-                    Text(if (total == 0) l("Add music to your phone, then scan again.") else l("Try another search or filter."),
-                        color = muted, fontSize = 14.sp)
-                    if (total == 0) {
-                        Spacer(Modifier.height(20.dp))
-                        Button(onClick = onScan) { Text(l("Scan music")) }
+            LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(16.dp),
+                state = androidx.compose.foundation.lazy.rememberLazyListState()) {
+                if (groupKind.isNotEmpty()) {
+                    item("group_header") {
+                        Text(if (groupName == "Other") l("Other") else groupName, color = white, fontFamily = headingFont, fontSize = 32.sp)
+                        Text(stringResource(R.string.songs_count, shown.size), color = muted)
+                        Button(onClick = { onShuffle(shown) }, enabled = shown.isNotEmpty()) { Text(l("Shuffle play")) }
                     }
-                }
-            } else if (filter != "all" && selectedGroup == null) {
-                LazyColumn(contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)) {
-                    items(groups.entries.sortedBy { it.key.lowercase() }) { (name, songs) ->
-                        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)
-                            .clip(RoundedCornerShape(14.dp)).background(panel)
-                            .clickable { selectedGroup = name }.padding(18.dp)) {
-                            Text(name, color = white, modifier = Modifier.weight(1f))
+                    items(shown, key = { "group_${it.id}" }, contentType = { "track" }) { track ->
+                        TrackRow(track, activeId == track.id.toString()) { onTrack(shown, track) }
+                    }
+                } else {
+                    item("smart") {
+                        Button(onClick = onSmartPlay, enabled = total > 0) {
+                            Icon(Icons.Default.AutoAwesome, null); Spacer(Modifier.width(8.dp)); Text(l("Smart play"))
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+                    item("tracks_header") {
+                        Text(l("All Tracks"), color = white, fontFamily = headingFont, fontSize = 28.sp)
+                        Text(stringResource(R.string.songs_count, tracks.size), color = muted)
+                    }
+                    items(tracks.take(5), key = { "track_${it.id}" }, contentType = { "track" }) { track ->
+                        TrackRow(track, activeId == track.id.toString()) { onTrack(tracks, track) }
+                    }
+                    if (tracks.isEmpty()) item("empty") {
+                        Text(if (total == 0) l("Add music to your phone, then scan again.") else l("No matching songs"),
+                            color = muted, modifier = Modifier.padding(vertical = 24.dp))
+                    }
+                    item("artists_header") {
+                        HorizontalDivider(Modifier.padding(vertical = 16.dp), color = raised)
+                        Text(l("Artists"), color = white, fontFamily = headingFont, fontSize = 28.sp)
+                    }
+                    items(artists.entries.take(3), key = { "artist_${it.key}" }, contentType = { "group" }) { (name, songs) ->
+                        Row(Modifier.fillMaxWidth().clickable { groupKind = "artist"; groupName = name }.padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            Artwork(songs.firstOrNull(), Modifier.size(48.dp), 24.dp)
+                            Spacer(Modifier.width(12.dp))
+                            Text(name, color = white, modifier = Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("${songs.size}", color = muted)
+                        }
+                    }
+                    item("genres_header") {
+                        HorizontalDivider(Modifier.padding(vertical = 16.dp), color = raised)
+                        Text(l("Genres"), color = white, fontFamily = headingFont, fontSize = 28.sp)
+                    }
+                    items(genres.entries.take(3), key = { "genre_${it.key}" }, contentType = { "group" }) { (name, songs) ->
+                        Row(Modifier.fillMaxWidth().clickable { groupKind = "genre"; groupName = name }
+                            .padding(vertical = 18.dp)) {
+                            Text(if (name == "Other") l("Other") else name, color = white, modifier = Modifier.weight(1f))
                             Text("${songs.size}", color = accent)
                         }
                     }
                 }
-            } else LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
-                items(shown, key = { it.id }, contentType = { "track" }) { track ->
-                    TrackRow(track, activeId == track.id.toString()) { onTrack(shown, track) }
-                }
             }
         }
     }
-
     @Composable private fun FilterPill(label: String, selected: Boolean, onClick: () -> Unit) {
         Box(Modifier.clip(RoundedCornerShape(50)).background(if (selected) accent else panel)
             .clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 10.dp)) {
@@ -899,4 +877,5 @@ private fun parseLrc(value: String): List<Pair<Long, String>> {
         ((minute * 60 + second) * 1000 + fraction) to line.substring(match.range.last + 1).trim()
     }.filter { it.second.isNotEmpty() }.sortedBy { it.first }.toList()
 }
+
 
