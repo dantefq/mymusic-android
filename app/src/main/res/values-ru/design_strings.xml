@@ -1,0 +1,8 @@
+<resources>
+    <string name="ui_appearance">Оформление</string>
+    <string name="ui_customize_colors_and_type">Цвета и шрифты</string>
+    <string name="ui_accent_color">Акцентный цвет</string>
+    <string name="ui_background_color">Цвет фона</string>
+    <string name="ui_apply_colors">Применить цвета</string>
+    <string name="ui_reset_defaults">Сбросить настройки</string>
+</resources>

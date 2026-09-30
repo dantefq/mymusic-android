@@ -745,6 +745,7 @@ class MainActivity : ComponentActivity() {
         Column(modifier.fillMaxSize()) {
             PageHeader(l("Settings"), onBack)
             LazyColumn(contentPadding = PaddingValues(24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                item { AppearanceSettings() }
                 item {
                     Text(l("Language"), color = white, fontSize = 25.sp, fontWeight = FontWeight.Bold)
                     listOf("" to l("System default"), "en" to "English", "ru" to "Русский").forEach { (tag, label) ->

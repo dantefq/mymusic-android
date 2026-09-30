@@ -1,0 +1,8 @@
+<resources>
+    <string name="ui_appearance">Appearance</string>
+    <string name="ui_customize_colors_and_type">Customize colors and type</string>
+    <string name="ui_accent_color">Accent color</string>
+    <string name="ui_background_color">Background color</string>
+    <string name="ui_apply_colors">Apply colors</string>
+    <string name="ui_reset_defaults">Reset defaults</string>
+</resources>
