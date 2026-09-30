@@ -33,6 +33,8 @@ class PlaybackService : MediaSessionService() {
     private var sessionId = C.AUDIO_SESSION_ID_UNSET
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var crossfadeJob: Job? = null
+    private val snapshot by lazy { PlaybackSnapshot(this) }
+    private var restoring = true
     private val metadata by lazy { Metadata(this, MusicDb.get(this).tracks()) }
 
     override fun onCreate() {
@@ -44,12 +46,20 @@ class PlaybackService : MediaSessionService() {
             setWakeMode(C.WAKE_MODE_LOCAL)
             addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) {
+                    if (!restoring) {
+                        if (events.contains(Player.EVENT_TIMELINE_CHANGED)) snapshot.saveQueue(player)
+                        else if (events.contains(Player.EVENT_POSITION_DISCONTINUITY) ||
+                            events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED) ||
+                            events.contains(Player.EVENT_REPEAT_MODE_CHANGED) ||
+                            events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED)) snapshot.savePosition(player)
+                    }
                     if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ||
                         events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
                         PlayerWidget.update(this@PlaybackService, player.currentMediaItem, player.isPlaying)
                     }
                 }
                 override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                    if (restoring) return
                     val id = mediaItem?.mediaId?.toLongOrNull() ?: return
                     scope.launch(Dispatchers.IO) {
                         MusicDb.get(this@PlaybackService).plays().put(PlayEvent(trackId = id,
@@ -73,6 +83,8 @@ class PlaybackService : MediaSessionService() {
         val activityIntent = PendingIntent.getActivity(this, 0,
             Intent(this, MainActivity::class.java),
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        snapshot.restore(player)
+        restoring = false
         session = MediaSession.Builder(this, player).setSessionActivity(activityIntent).build()
         val notificationProvider = DefaultMediaNotificationProvider.Builder(this).build()
         notificationProvider.setSmallIcon(R.drawable.notification_icon)
@@ -80,6 +92,7 @@ class PlaybackService : MediaSessionService() {
         scope.launch {
             val prefs = getSharedPreferences("playback", MODE_PRIVATE)
             while (true) {
+                if (player.isPlaying) snapshot.savePosition(player)
                 val deadline = prefs.getLong("sleep_until", 0)
                 if (deadline > 0 && System.currentTimeMillis() >= deadline) {
                     player.pause()
@@ -153,7 +166,13 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        snapshot.savePosition(player)
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
+        snapshot.savePosition(player)
         AudioEffects.equalizer = null; AudioEffects.bassBoost = null; AudioEffects.loudnessEnhancer = null
         equalizer?.release(); bassBoost?.release(); loudnessEnhancer?.release()
         crossfadeJob?.cancel()
