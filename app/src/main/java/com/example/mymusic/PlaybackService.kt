@@ -20,6 +20,10 @@ import android.os.SystemClock
 import android.content.Intent
 import android.app.PendingIntent
 import android.media.AudioManager
+import android.net.Uri
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
+import kotlinx.coroutines.withContext
 import androidx.media3.session.DefaultMediaNotificationProvider
 
 class PlaybackService : MediaSessionService() {
@@ -93,6 +97,21 @@ class PlaybackService : MediaSessionService() {
             val prefs = getSharedPreferences("playback", MODE_PRIVATE)
             while (true) {
                 if (player.isPlaying) snapshot.savePosition(player)
+                if (prefs.getString("queue_mode", "off") == "random" && player.mediaItemCount > 0 &&
+                    player.mediaItemCount - player.currentMediaItemIndex <= 3) {
+                    val currentId = player.currentMediaItem?.mediaId
+                    val next = withContext(Dispatchers.IO) {
+                        randomContinuation(MusicDb.get(this@PlaybackService).tracks().all(), currentId?.toLongOrNull())
+                    }
+                    if (prefs.getString("queue_mode", "off") == "random" && player.currentMediaItem?.mediaId == currentId) {
+                        if (player.currentMediaItemIndex > 30) player.removeMediaItems(0, player.currentMediaItemIndex - 10)
+                        player.addMediaItems(next.map { track ->
+                            MediaItem.Builder().setMediaId(track.id.toString()).setUri(track.uri)
+                                .setMediaMetadata(MediaMetadata.Builder().setTitle(track.title).setArtist(track.artist)
+                                    .setAlbumTitle(track.album).setArtworkUri(track.artUri?.let(Uri::parse)).build()).build()
+                        })
+                    }
+                }
                 val deadline = prefs.getLong("sleep_until", 0)
                 if (deadline > 0 && System.currentTimeMillis() >= deadline) {
                     player.pause()

@@ -162,8 +162,9 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun play(tracks: List<Track>, selected: Track) {
+    private fun play(tracks: List<Track>, selected: Track, mode: String = "off") {
         val player = controller ?: run { message = localized("Player is starting. Try again."); return }
+        getSharedPreferences("playback", MODE_PRIVATE).edit().putString("queue_mode", mode).apply()
         player.setMediaItems(tracks.map(::mediaItem), tracks.indexOf(selected), 0)
         player.prepare()
         player.play()
@@ -232,7 +233,9 @@ class MainActivity : ComponentActivity() {
         val togglePlay: () -> Unit = { player?.let { if (it.isPlaying) it.pause() else it.play() }; Unit }
         val playNormal: (List<Track>, Track) -> Unit = { list, track ->
             waveActive = false
-            play(list, track)
+            if (settledQuery.isNotBlank()) {
+                play(listOf(track) + randomContinuation(tracks, track.id), track, "random")
+            } else play(list, track)
         }
         BackHandler(page != "library") {
             page = when (page) {
