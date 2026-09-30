@@ -58,8 +58,10 @@ class Metadata(context: Context, private val dao: TrackDao) {
         val releaseId = release?.optString("id")?.takeIf { it.matches(Regex("[0-9a-fA-F-]{36}")) }
         val art = local.artUri ?: track.artUri ?: releaseId?.let { cacheCover(track.id, it) }
         val title = local.title ?: match?.optString("title").tagValue() ?: track.title
-        val artist = local.artist ?: match?.optJSONArray("artist-credit")?.optJSONObject(0)
-            ?.optString("name").tagValue() ?: track.artist
+        val credits = match?.optJSONArray("artist-credit")
+        val artist = local.artist ?: (0 until (credits?.length() ?: 0))
+            .mapNotNull { credits?.optJSONObject(it)?.optString("name").tagValue() }
+            .joinToString("; ").tagValue() ?: track.artist
         val album = local.album ?: release?.optString("title").tagValue() ?: track.album
         val lyricsUrl = "https://lrclib.net/api/get?track_name=${Uri.encode(title)}" +
             "&artist_name=${Uri.encode(artist)}&album_name=${Uri.encode(album)}" +

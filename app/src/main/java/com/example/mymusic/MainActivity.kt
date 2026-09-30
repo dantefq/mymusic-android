@@ -305,7 +305,7 @@ class MainActivity : ComponentActivity() {
                     onBack = { page = "library" }, onPlay = { list, track -> play(list, track) },
                     onOptions = { trackOptions = it }, modifier = Modifier.padding(inner))
                 "artist" -> ArtistPage(selectedArtist, remember(tracks, selectedArtist) {
-                    tracks.filter { it.artist.equals(selectedArtist, true) }
+                    tracks.filter { track -> artistNames(track).any { it.equals(selectedArtist, true) } }
                 }, onBack = { page = "library" }, onPlay = { list, track -> play(list, track) },
                     onAlbum = { selectedAlbum = it; page = "album" }, onOptions = { trackOptions = it },
                     modifier = Modifier.padding(inner))
@@ -333,9 +333,12 @@ class MainActivity : ComponentActivity() {
                     TextButton(onClick = {
                         selectedAlbum = albumKey(selected); query = ""; trackOptions = null; page = "album"
                     }) { Text(l("Go to album")) }
-                    TextButton(onClick = {
-                        selectedArtist = selected.artist; query = ""; trackOptions = null; page = "artist"
-                    }) { Text(l("Go to artist")) }
+                    Text(l("Go to artist"), color = muted)
+                    artistNames(selected).forEach { artist ->
+                        TextButton(onClick = {
+                            selectedArtist = artist; query = ""; trackOptions = null; page = "artist"
+                        }) { Text(artist) }
+                    }
                 }
             }
         }
@@ -381,7 +384,7 @@ class MainActivity : ComponentActivity() {
         var tracksExpanded by rememberSaveable { mutableStateOf(false) }
         var artistsExpanded by rememberSaveable { mutableStateOf(false) }
         var genresExpanded by rememberSaveable { mutableStateOf(false) }
-        val artists = remember(tracks) { tracks.groupBy { it.artist.ifBlank { "Unknown" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER) }
+        val artists = remember(tracks) { artistsForLibrary(tracks) }
         val genres = remember(tracks) { tracks.groupBy { it.genre.ifBlank { "Other" } }.toSortedMap(String.CASE_INSENSITIVE_ORDER) }
         val shown = when (groupKind) {
             "artist" -> artists[groupName].orEmpty()
@@ -522,7 +525,7 @@ class MainActivity : ComponentActivity() {
                 Text(first?.album?.ifBlank { l("Unknown album") } ?: l("Unknown album"), color = white,
                     fontFamily = headingFont, fontSize = 32.sp)
                 Text(first?.albumArtist?.ifBlank { first.artist }.orEmpty(), color = muted,
-                    modifier = Modifier.clickable { first?.let { onArtist(it.artist) } }.padding(vertical = 8.dp))
+                    modifier = Modifier.clickable { first?.let { onArtist(artistNames(it).firstOrNull().orEmpty()) } }.padding(vertical = 8.dp))
                 Text(stringResource(R.string.songs_count, songs.size), color = muted)
                 Button(onClick = { first?.let { onPlay(songs, it) } }, enabled = first != null) { Text(l("Play all")) }
             }
