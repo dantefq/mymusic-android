@@ -77,6 +77,8 @@ import androidx.palette.graphics.Palette
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.withContext
 import kotlin.math.roundToLong
 
@@ -89,6 +91,7 @@ class MainActivity : ComponentActivity() {
     private val metadata by lazy { Metadata(this, db.tracks()) }
     private var controller by mutableStateOf<MediaController?>(null)
     private var activityDestroyed = false
+    private var scanJob: Job? = null
     private var message by mutableStateOf("")
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { allowed ->
         if (allowed) scan() else message = localized("Allow audio access to see your music")
@@ -139,18 +142,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun requestOrScan() {
+    private fun requestOrScan(force: Boolean = false) {
         val p = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
-        if (checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED) scan() else permission.launch(p)
+        if (checkSelfPermission(p) == PackageManager.PERMISSION_GRANTED) scan(force) else permission.launch(p)
     }
 
-    private fun scan() = lifecycleScope.launch {
-        runCatching { withContext(Dispatchers.IO) { LocalLibrary(this@MainActivity, db.tracks()).scan() } }
+    private fun scan(force: Boolean = false) {
+        if (scanJob?.isActive == true) return
+        scanJob = lifecycleScope.launch {
+        runCatching { withContext(Dispatchers.IO) { LocalLibrary(applicationContext, db.tracks()).scan(force) } }
             .onSuccess {
                 message = localized("Library updated")
                 lifecycleScope.launch { metadata.enrichMissing() }
             }
             .onFailure { message = it.message ?: localized("Scan failed") }
+        }
     }
 
     private fun play(tracks: List<Track>, selected: Track) {
@@ -166,9 +172,9 @@ class MainActivity : ComponentActivity() {
             .setAlbumTitle(track.album).setArtworkUri(track.artUri?.let(Uri::parse)).build()).build()
 
     @Composable private fun Screen() {
-        val tracks by db.tracks().observe().collectAsStateWithLifecycle(emptyList())
-        val presets by db.eq().observe().collectAsStateWithLifecycle(emptyList())
-        val plays by db.plays().observeSince(0).collectAsStateWithLifecycle(emptyList())
+        val tracks by remember { db.tracks().observe().distinctUntilChanged() }.collectAsStateWithLifecycle(emptyList())
+        val presets by remember { db.eq().observe() }.collectAsStateWithLifecycle(emptyList())
+        val plays by remember { db.plays().observeSince(System.currentTimeMillis() - 90L * 86400000) }.collectAsStateWithLifecycle(emptyList())
         val player = controller
         var mediaId by remember { mutableStateOf<String?>(null) }
         var playing by remember { mutableStateOf(false) }
@@ -304,7 +310,7 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))
                 else -> LibraryPage(visible, tracks.size, query, { query = it },
-                    onScan = ::requestOrScan,
+                    onScan = { requestOrScan(true) },
                     onOutput = { outputOpen = true },
                     onSettings = { page = "settings" },
                     onShuffle = { list -> if (list.isNotEmpty()) { val shuffled = list.shuffled(); playNormal(shuffled, shuffled.first()) } },

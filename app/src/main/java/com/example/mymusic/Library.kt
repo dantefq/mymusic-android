@@ -36,6 +36,11 @@ data class Track(
     @Query("UPDATE tracks SET genre = :genre WHERE artist = :artist AND genre = ''")
     suspend fun fillGenreForArtist(artist: String, genre: String)
     @Upsert suspend fun put(track: Track)
+    @Upsert suspend fun putAll(tracks: List<Track>)
+    @Transaction suspend fun applyScan(changed: List<Track>, ids: List<Long>) {
+        if (changed.isNotEmpty()) putAll(changed)
+        if (ids.isEmpty()) clear() else prune(ids)
+    }
     @Query("DELETE FROM tracks WHERE id NOT IN (:ids)") suspend fun prune(ids: List<Long>)
     @Query("DELETE FROM tracks") suspend fun clear()
     @Query("SELECT * FROM tracks ORDER BY addedAt DESC LIMIT :limit") suspend fun recent(limit: Int): List<Track>
@@ -120,16 +125,21 @@ abstract class MusicDb : RoomDatabase() {
 }
 
 class LocalLibrary(private val context: Context, private val dao: TrackDao) {
-    suspend fun scan() = withContext(Dispatchers.IO) {
+    suspend fun scan(force: Boolean = false) = withContext(Dispatchers.IO) {
         val uri = MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
         val projection = arrayOf(
             MediaStore.Audio.Media._ID, MediaStore.Audio.Media.TITLE,
             MediaStore.Audio.Media.ARTIST, MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION, MediaStore.Audio.Media.MIME_TYPE,
             MediaStore.Audio.Media.DATE_ADDED, MediaStore.Audio.Media.DISPLAY_NAME,
-            MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.RELATIVE_PATH
+            MediaStore.Audio.Media.DATA, MediaStore.Audio.Media.RELATIVE_PATH,
+            MediaStore.Audio.Media.DATE_MODIFIED, MediaStore.Audio.Media.SIZE
         )
         val tags = LocalTagReader(context)
+        val existing = dao.all().associateBy { it.id }
+        val fingerprints = context.getSharedPreferences("scan_cache", Context.MODE_PRIVATE)
+        val edits = fingerprints.edit()
+        val changed = mutableListOf<Track>()
         val ids = mutableListOf<Long>()
         val cursor = context.contentResolver.query(uri, projection, null, null,
             "${MediaStore.Audio.Media.TITLE} COLLATE NOCASE") ?: return@withContext
@@ -137,7 +147,9 @@ class LocalLibrary(private val context: Context, private val dao: TrackDao) {
             while (c.moveToNext()) {
                 val id = c.getLong(0)
                 ids += id
-                val old = dao.get(id)
+                val old = existing[id]
+                val stamp = "${c.getLong(10)}:${c.getLong(11)}"
+                if (!force && old != null && fingerprints.getString(id.toString(), null) == stamp) continue
                 val trackUri = ContentUris.withAppendedId(uri, id)
                 val local = tags.read(trackUri, id, c.getString(8))
                 val fileName = c.getString(7)?.substringBeforeLast('.')?.tagValue()
@@ -146,7 +158,7 @@ class LocalLibrary(private val context: Context, private val dao: TrackDao) {
                     local.genre?.contains("audiobook", true) == true ||
                     local.genre?.contains("spoken word", true) == true
                 val online = old?.takeIf { it.fetchedAt > 0 }
-                dao.put(Track(
+                changed.add(Track(
                     id, trackUri.toString(),
                     local.title ?: online?.title.tagValue() ?: fileName ?: c.getString(1).tagValue() ?: "Unknown",
                     local.artist ?: online?.artist.tagValue() ?: c.getString(2).tagValue() ?: "Unknown",
@@ -158,8 +170,11 @@ class LocalLibrary(private val context: Context, private val dao: TrackDao) {
                     local.title == null || local.artist == null || local.album == null || local.artUri == null,
                     audiobook
                 ))
+                edits.putString(id.toString(), stamp)
             }
         }
-        if (ids.isNotEmpty()) dao.prune(ids) else dao.clear()
+        dao.applyScan(changed, ids)
+        (existing.keys - ids.toSet()).forEach { edits.remove(it.toString()) }
+        edits.apply()
     }
 }

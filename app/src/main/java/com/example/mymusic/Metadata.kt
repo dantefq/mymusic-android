@@ -15,8 +15,8 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.TimeUnit
 
-class Metadata(private val context: Context, private val dao: TrackDao) {
-    private val http = OkHttpClient.Builder().callTimeout(12, TimeUnit.SECONDS).build()
+class Metadata(context: Context, private val dao: TrackDao) {
+    private val context = context.applicationContext
     private val tags = LocalTagReader(context)
 
     suspend fun enrichMissing() = withContext(Dispatchers.IO) {
@@ -119,6 +119,7 @@ class Metadata(private val context: Context, private val dao: TrackDao) {
     }.getOrNull()
 
     companion object {
+        private val http = OkHttpClient.Builder().callTimeout(12, TimeUnit.SECONDS).build()
         private const val USER_AGENT = "MyMusic/1.0 (https://github.com/dantefq/mymusic-android)"
         private val rateLimit = Mutex()
         private var lastRequest = 0L
