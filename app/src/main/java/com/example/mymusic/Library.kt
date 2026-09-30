@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withContext
 
 @Entity(tableName = "tracks")
+@androidx.compose.runtime.Immutable
 data class Track(
     @PrimaryKey val id: Long,
     val uri: String,

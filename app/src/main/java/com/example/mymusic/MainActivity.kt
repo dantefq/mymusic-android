@@ -172,8 +172,6 @@ class MainActivity : ComponentActivity() {
         val player = controller
         var mediaId by remember { mutableStateOf<String?>(null) }
         var playing by remember { mutableStateOf(false) }
-        var position by remember { mutableLongStateOf(0L) }
-        var duration by remember { mutableLongStateOf(0L) }
         var page by remember { mutableStateOf("library") }
         var waveActive by remember { mutableStateOf(false) }
         var waveSeed by remember { mutableIntStateOf(1) }
@@ -189,21 +187,12 @@ class MainActivity : ComponentActivity() {
                 override fun onEvents(p: Player, events: Player.Events) {
                     mediaId = p.currentMediaItem?.mediaId
                     playing = p.isPlaying
-                    duration = p.duration.coerceAtLeast(0)
-                    position = p.currentPosition.coerceAtLeast(0)
                 }
             }
             player?.addListener(listener)
             mediaId = player?.currentMediaItem?.mediaId
             playing = player?.isPlaying == true
             onDispose { player?.removeListener(listener) }
-        }
-        LaunchedEffect(player, playing) {
-            while (playing) {
-                position = player?.currentPosition?.coerceAtLeast(0) ?: 0
-                duration = player?.duration?.coerceAtLeast(0) ?: 0
-                delay(500)
-            }
         }
         LaunchedEffect(mediaId, waveActive, tracks, plays) {
             if (waveActive && player != null && mediaId != null) {
@@ -250,11 +239,11 @@ class MainActivity : ComponentActivity() {
             bottomBar = {
                 if (page in listOf("library", "my_wave", "audiobooks", "playlists")) {
                     Column {
-                        if (active != null) MiniPlayer(active, playing, position, duration,
+                        if (active != null) PlaybackProgress(player) { position, duration -> MiniPlayer(active, playing, position, duration,
                             onOpen = { page = "player" }, onPlay = togglePlay,
                             onQueue = { page = "queue" },
                             onPrevious = { player?.seekToPreviousMediaItem() },
-                            onNext = { player?.seekToNextMediaItem() })
+                            onNext = { player?.seekToNextMediaItem() }) }
                         NavigationBar(containerColor = ink, tonalElevation = 0.dp) {
                             listOf(
                                 Triple("library", Icons.Default.LibraryMusic, l("Library")),
@@ -283,13 +272,13 @@ class MainActivity : ComponentActivity() {
                 } else fadeIn(tween(200)) togetherWith fadeOut(tween(140))
             }) { screen ->
             when (screen) {
-                "player" -> PlayerPage(active, playing, position, duration,
+                "player" -> PlaybackProgress(player) { position, duration -> PlayerPage(active, playing, position, duration,
                     onBack = { page = "library" }, onPlay = togglePlay,
                     onPrevious = { player?.seekToPreviousMediaItem() },
                     onNext = { player?.seekToNextMediaItem() },
                     onSeek = { player?.seekTo(it) },
                     onEqualizer = { equalizerReturnPage = "player"; page = "equalizer" },
-                    modifier = Modifier.padding(inner))
+                    modifier = Modifier.padding(inner)) }
                 "equalizer" -> EqualizerPage(presets, onBack = { page = equalizerReturnPage },
                     modifier = Modifier.padding(inner))
                 "settings" -> SettingsPage(onBack = { page = "library" },
@@ -448,7 +437,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             } else LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 24.dp)) {
-                items(shown, key = { it.id }) { track ->
+                items(shown, key = { it.id }, contentType = { "track" }) { track ->
                     TrackRow(track, activeId == track.id.toString()) { onTrack(shown, track) }
                 }
             }
