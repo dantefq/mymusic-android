@@ -53,6 +53,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -142,7 +143,14 @@ class MainActivity : ComponentActivity() {
             ContextCompat.getMainExecutor(this))
         requestOrScan()
         setContent {
-            MyMusicTheme { Screen() }
+            MyMusicTheme {
+                val background = ink
+                SideEffect {
+                    window.statusBarColor = background.toArgb()
+                    window.navigationBarColor = background.toArgb()
+                }
+                Screen()
+            }
         }
     }
 
@@ -228,7 +236,7 @@ class MainActivity : ComponentActivity() {
         BackHandler(page != "library") {
             page = when (page) {
                 "equalizer" -> equalizerReturnPage
-                "stats" -> "settings"
+                "stats" -> "library"
                 else -> "library"
             }
         }
@@ -242,13 +250,14 @@ class MainActivity : ComponentActivity() {
                         if (active != null) PlaybackProgress(player) { position, duration -> MiniPlayer(active, playing, position, duration,
                             onOpen = { page = "player" }, onPlay = togglePlay,
                             onQueue = { page = "queue" },
+                            onOutput = { outputOpen = true },
                             onPrevious = { player?.seekToPreviousMediaItem() },
                             onNext = { player?.seekToNextMediaItem() }) }
                         NavigationBar(containerColor = ink, tonalElevation = 0.dp) {
                             listOf(
                                 Triple("library", Icons.Default.LibraryMusic, l("Library")),
-                                Triple("stats", Icons.Default.BarChart, l("Stats")),
-                                Triple("playlists", Icons.Default.QueueMusic, l("Playlists"))
+                                Triple("playlists", Icons.Default.QueueMusic, l("Playlists")),
+                                Triple("stats", Icons.Default.BarChart, l("Stats"))
                             ).forEach { (destination, icon, label) ->
                                 NavigationBarItem(selected = page == destination,
                                     onClick = { page = destination },
@@ -272,6 +281,7 @@ class MainActivity : ComponentActivity() {
             }) { screen ->
             when (screen) {
                 "player" -> PlaybackProgress(player) { position, duration -> PlayerPage(active, playing, position, duration,
+                    onOutput = { outputOpen = true },
                     onOptions = { active?.let { trackOptions = it } },
                     onBack = { page = "library" }, onPlay = togglePlay,
                     onPrevious = { player?.seekToPreviousMediaItem() },
@@ -297,7 +307,7 @@ class MainActivity : ComponentActivity() {
                 }, modifier = Modifier.padding(inner))
                 "audiobooks" -> AudiobooksScreen(tracks, playNormal, Modifier.padding(inner))
                 "playlists" -> PlaylistsScreen(db, tracks, playNormal, Modifier.padding(inner))
-                "stats" -> StatsScreen(tracks, plays, onBack = { page = "settings" },
+                "stats" -> StatsScreen(tracks, plays, onBack = { page = "library" },
                     modifier = Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { page = "library" }, modifier = Modifier.padding(inner))
                 "album" -> AlbumPage(remember(tracks, selectedAlbum) { albumTracks(tracks, selectedAlbum) },
@@ -596,10 +606,11 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable private fun MiniPlayer(track: Track, playing: Boolean, position: Long, duration: Long,
+        onOutput: () -> Unit,
         onOpen: () -> Unit, onPlay: () -> Unit, onQueue: () -> Unit,
         onPrevious: () -> Unit, onNext: () -> Unit) {
         val view = LocalView.current
-        Column(Modifier.fillMaxWidth().background(ink).navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp)) {
+        Column(Modifier.fillMaxWidth().background(ink).padding(horizontal = 8.dp, vertical = 6.dp)) {
             Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(raised)
                 .pointerInput(Unit) {
                     var dy = 0f
@@ -645,14 +656,17 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                IconButton(onClick = onPrevious, modifier = Modifier.size(37.dp)) {
+                IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.SkipPrevious, l("Previous"), tint = white)
                 }
-                IconButton(onClick = onPlay, modifier = Modifier.size(37.dp)) {
+                IconButton(onClick = onPlay, modifier = Modifier.size(48.dp)) {
                     PlayPauseGlyph(playing, white)
                 }
-                IconButton(onClick = onNext, modifier = Modifier.size(37.dp)) {
+                IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.SkipNext, l("Next"), tint = white)
+                }
+                IconButton(onClick = onOutput, modifier = Modifier.size(48.dp)) {
+                    Icon(Icons.Default.Speaker, l("Output device"), tint = white)
                 }
             }
             LinearProgressIndicator(progress = { if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f },
@@ -662,6 +676,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable private fun PlayerPage(track: Track?, playing: Boolean, position: Long, duration: Long,
+        onOutput: () -> Unit,
         onOptions: () -> Unit,
         onBack: () -> Unit, onPlay: () -> Unit, onPrevious: () -> Unit,
         onNext: () -> Unit, onSeek: (Long) -> Unit, onEqualizer: () -> Unit,
@@ -703,6 +718,7 @@ class MainActivity : ComponentActivity() {
             Row(Modifier.fillMaxWidth().height(62.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) { Icon(Icons.Default.KeyboardArrowDown, l("Back to library"), tint = white) }
                 Spacer(Modifier.weight(1f))
+                IconButton(onClick = onOutput) { Icon(Icons.Default.Speaker, l("Output device"), tint = white) }
                 IconButton(onClick = onEqualizer) { Icon(Icons.Default.Equalizer, l("Equalizer"), tint = white) }
                 IconButton(onClick = onOptions) { Icon(Icons.Default.MoreVert, l("Track options"), tint = white) }
             }
@@ -731,7 +747,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             Spacer(Modifier.weight(0.8f))
-            Text(track?.title ?: l("Nothing playing"), color = white, fontSize = 27.sp,
+            Text(track?.title ?: l("Nothing playing"), color = white, fontSize = 30.sp, fontFamily = headingFont,
                 fontWeight = FontWeight.Bold, maxLines = 2, overflow = TextOverflow.Ellipsis)
             Spacer(Modifier.height(5.dp))
             Text(track?.artist ?: l("Choose a song from your library"), color = muted, fontSize = 16.sp,
@@ -1001,6 +1017,7 @@ private fun parseLrc(value: String): List<Pair<Long, String>> {
         ((minute * 60 + second) * 1000 + fraction) to line.substring(match.range.last + 1).trim()
     }.filter { it.second.isNotEmpty() }.sortedBy { it.first }.toList()
 }
+
 
 
 
