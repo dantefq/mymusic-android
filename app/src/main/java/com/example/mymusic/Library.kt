@@ -46,6 +46,7 @@ data class Track(
     }
     @Query("DELETE FROM tracks WHERE id NOT IN (:ids)") suspend fun prune(ids: List<Long>)
     @Query("DELETE FROM tracks") suspend fun clear()
+    @Query("DELETE FROM tracks WHERE id IN (:ids)") suspend fun deleteIds(ids: List<Long>)
     @Query("SELECT * FROM tracks ORDER BY addedAt DESC LIMIT :limit") suspend fun recent(limit: Int): List<Track>
 }
 
@@ -53,6 +54,8 @@ data class Track(
 data class PlayEvent(@PrimaryKey(autoGenerate = true) val id: Long = 0, val trackId: Long, val playedAt: Long)
 
 @Dao interface PlayDao {
+    @Query("DELETE FROM plays WHERE trackId IN (:ids)") suspend fun deleteTracks(ids: List<Long>)
+    @Query("UPDATE plays SET trackId = :keepId WHERE trackId = :removeId") suspend fun replaceTrack(removeId: Long, keepId: Long)
     @Query("SELECT * FROM plays WHERE playedAt >= :since ORDER BY playedAt DESC") suspend fun since(since: Long): List<PlayEvent>
     @Insert suspend fun put(event: PlayEvent)
     @Query("SELECT * FROM plays WHERE playedAt >= :since ORDER BY playedAt DESC") fun observeSince(since: Long): Flow<List<PlayEvent>>
@@ -68,6 +71,9 @@ data class Playlist(@PrimaryKey(autoGenerate = true) val id: Long = 0, val name:
 data class PlaylistEntry(val playlistId: Long, val trackId: Long, val position: Int)
 
 @Dao interface PlaylistDao {
+    @Query("INSERT OR IGNORE INTO playlist_entries (playlistId, trackId, position) SELECT playlistId, :keepId, position FROM playlist_entries WHERE trackId = :removeId")
+    suspend fun copyTrackReferences(removeId: Long, keepId: Long)
+    @Query("DELETE FROM playlist_entries WHERE trackId = :id") suspend fun removeTrackReferences(id: Long)
     @Query("SELECT * FROM playlists ORDER BY createdAt DESC") fun observe(): Flow<List<Playlist>>
     @Query("SELECT * FROM playlists") suspend fun all(): List<Playlist>
     @Insert suspend fun put(playlist: Playlist): Long

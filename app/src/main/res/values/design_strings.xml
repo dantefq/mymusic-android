@@ -26,6 +26,49 @@
 <string name="ui_date_added">Date added</string>
 <string name="ui_descending">Descending</string>
 <string name="ui_sort_and_filter">Sort and filter</string>
+    <string name="ui_theme">Theme</string>
+    <string name="ui_light">Light</string>
+    <string name="ui_dark">Dark</string>
+    <string name="ui_system">System</string>
+    <string name="ui_cobalt">Cobalt</string>
+    <string name="ui_coral">Coral</string>
+    <string name="ui_mint">Mint</string>
+    <string name="ui_graphite">Graphite</string>
+    <string name="ui_slate">Slate</string>
+    <string name="ui_midnight">Midnight</string>
+    <string name="ui_customize_the_look_and_feel_of_mymusic">Customize the look and feel of MyMusic.</string>
+    <string name="ui_shuffle">Shuffle</string>
+    <string name="ui_repeat">Repeat</string>
+    <string name="ui_favorite">Favorite</string>
+    <string name="ui_order">Order</string>
+    <string name="ui_audio_quality">Audio quality</string>
+    <string name="ui_lossless_only">Lossless only</string>
+    <string name="ui_see_all">See all</string>
+    <string name="ui_collaborators">Collaborators</string>
+    <string name="ui_top_result">Top result</string>
+    <string name="ui_songs">Songs</string>
+    <string name="ui_tracks">Tracks</string>
+    <string name="ui_all">All</string>
+    <string name="design_artists_count">%1$d artists</string>
+    <string name="design_albums_count">%1$d albums</string>
+    <string name="design_genres_count">%1$d genres</string>
+    <string name="design_minutes_count">%1$d min</string>
+    <string name="design_featured_count">Featured on %1$d tracks</string>
+    <string name="ui_smart_mix">Smart Mix</string>
+    <string name="ui_made_for_you">Made for you</string>
+    <string name="ui_lyrics_timing">Lyrics timing</string>
+    <string name="ui_earlier">Earlier</string>
+    <string name="ui_later">Later</string>
+    <string name="ui_reset">Reset</string>
+    <string name="ui_auto_delete_duplicates">Auto-delete duplicates</string>
+    <string name="ui_keep_one_verified_copy_android_asks_before_deleting_files">Keep one verified copy. Android asks before deleting files.</string>
+    <string name="ui_remove_all_duplicates">Remove all duplicates</string>
+    <string name="ui_duplicates_removed">Duplicates removed</string>
+    <string name="ui_delete_failed">Delete failed</string>
+    <string name="ui_audiobooks_in_your_audiobooks_folder_appear_here">Audiobooks in your Audiobooks folder appear here.</string>
+    <plurals name="design_albums"><item quantity="one">%1$d album</item><item quantity="other">%1$d albums</item></plurals>
+    <plurals name="design_artists"><item quantity="one">%1$d artist</item><item quantity="other">%1$d artists</item></plurals>
+    <plurals name="design_tracks"><item quantity="one">%1$d track</item><item quantity="other">%1$d tracks</item></plurals>
 </resources>
 
 

@@ -29,7 +29,7 @@
     <string name="ui_album_artwork">Обложка альбома</string>
     <string name="ui_previous">Предыдущий</string>
     <string name="ui_next">Следующий</string>
-    <string name="ui_play">Воспроизвести</string>
+    <string name="ui_play">Слушать</string>
     <string name="ui_pause">Пауза</string>
     <string name="ui_output_device">Устройство вывода</string>
     <string name="ui_phone_speaker">Динамик телефона</string>
@@ -68,7 +68,7 @@
     <string name="ui_listening_statistics">Статистика прослушиваний</string>
     <string name="ui_week">Неделя</string>
     <string name="ui_month">Месяц</string>
-    <string name="ui_top_tracks">Популярные песни</string>
+    <string name="ui_top_tracks">Топ треков</string>
     <string name="ui_top_artists">Популярные исполнители</string>
     <string name="ui_add">Добавить</string>
     <string name="ui_all_playlists">Все плейлисты</string>

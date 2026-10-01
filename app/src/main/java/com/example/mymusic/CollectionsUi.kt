@@ -59,25 +59,23 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
 
 @Composable fun CollectionHeader(title: String, subtitle: String) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 22.dp)) {
-        Text(title, color = white, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+        Text(title, color = white, fontSize = 32.sp, fontFamily = headingFont)
         Text(subtitle, color = muted, fontSize = 13.sp)
     }
 }
 
-@Composable fun CollectionTrack(track: Track, onClick: () -> Unit, modifier: Modifier = Modifier) {
+@Composable fun CollectionTrack(track: Track, onClick: () -> Unit, modifier: Modifier = Modifier,
+    onAlbum: (Track) -> Unit = {}, onArtist: (String) -> Unit = {}) {
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick)
         .padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-        Box(Modifier.size(42.dp).clip(RoundedCornerShape(10.dp)).background(raised),
-            contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.PlayArrow, null, tint = accent)
-        }
+        Artwork(track, Modifier.size(48.dp), 5.dp)
         Spacer(Modifier.width(13.dp))
         Column(Modifier.weight(1f)) {
-            Text(track.title, color = white, fontWeight = FontWeight.SemiBold, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
-            Text(track.artist, color = muted, fontSize = 12.sp, maxLines = 1,
-                overflow = TextOverflow.Ellipsis)
+            Text(track.title, color = white, fontFamily = headingFont, maxLines = 1,
+                overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable { onAlbum(track) })
+            ArtistLinks(track, onArtist, size = 12)
         }
+        IconButton(onClick = onClick) { Icon(Icons.Default.PlayArrow, l("Play"), tint = accent) }
     }
 }
 
@@ -91,11 +89,13 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
 }
 
 @Composable fun AudiobooksScreen(tracks: List<Track>, onPlay: (List<Track>, Track) -> Unit,
+    onAlbum: (Track) -> Unit, onArtist: (String) -> Unit,
     modifier: Modifier = Modifier) {
     val books = remember(tracks) { tracks.filter { it.isAudiobook } }
     LazyColumn(modifier.fillMaxSize()) {
         item { CollectionHeader(l("Audiobooks"), stringResource(R.string.songs_count, books.size)) }
-        items(books, key = { it.id }) { track -> CollectionTrack(track, { onPlay(books, track) }) }
+        items(books, key = { it.id }, contentType = { "book" }) { track -> CollectionTrack(track, { onPlay(books, track) }, onAlbum = onAlbum, onArtist = onArtist) }
+        if (books.isEmpty()) item { Text(l("Audiobooks in your Audiobooks folder appear here."), color = muted, modifier = Modifier.padding(horizontal = 24.dp)) }
     }
 }
 
@@ -185,6 +185,7 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
 }
 
 @Composable fun PlaylistsScreen(db: MusicDb, tracks: List<Track>, onPlay: (List<Track>, Track) -> Unit,
+    onAlbum: (Track) -> Unit, onArtist: (String) -> Unit,
     modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -263,7 +264,7 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
                                 }
                                 dx = 0f
                             })
-                        })
+                        }, onAlbum = onAlbum, onArtist = onArtist)
                 }
             }
         } else LazyColumn {

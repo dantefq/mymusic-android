@@ -26,6 +26,49 @@
 <string name="ui_date_added">Дата добавления</string>
 <string name="ui_descending">По убыванию</string>
 <string name="ui_sort_and_filter">Сортировка и фильтр</string>
+    <string name="ui_theme">Тема</string>
+    <string name="ui_light">Светлая</string>
+    <string name="ui_dark">Тёмная</string>
+    <string name="ui_system">Системная</string>
+    <string name="ui_cobalt">Кобальт</string>
+    <string name="ui_coral">Коралл</string>
+    <string name="ui_mint">Мята</string>
+    <string name="ui_graphite">Графит</string>
+    <string name="ui_slate">Сланец</string>
+    <string name="ui_midnight">Полночь</string>
+    <string name="ui_customize_the_look_and_feel_of_mymusic">Настройте внешний вид MyMusic.</string>
+    <string name="ui_shuffle">Перемешать</string>
+    <string name="ui_repeat">Повтор</string>
+    <string name="ui_favorite">Избранное</string>
+    <string name="ui_order">Порядок</string>
+    <string name="ui_audio_quality">Качество аудио</string>
+    <string name="ui_lossless_only">Без потерь</string>
+    <string name="ui_see_all">Показать всё</string>
+    <string name="ui_collaborators">Совместные исполнители</string>
+    <string name="ui_top_result">Лучший результат</string>
+    <string name="ui_songs">Песни</string>
+    <string name="ui_tracks">Треки</string>
+    <string name="ui_all">Все</string>
+    <string name="design_artists_count">%1$d исполнителей</string>
+    <string name="design_albums_count">%1$d альбомов</string>
+    <string name="design_genres_count">%1$d жанров</string>
+    <string name="design_minutes_count">%1$d мин</string>
+    <string name="design_featured_count">Совместных треков: %1$d</string>
+    <string name="ui_smart_mix">Умный микс</string>
+    <string name="ui_made_for_you">Для вас</string>
+    <string name="ui_lyrics_timing">Синхронизация текста</string>
+    <string name="ui_earlier">Раньше</string>
+    <string name="ui_later">Позже</string>
+    <string name="ui_reset">Сброс</string>
+    <string name="ui_auto_delete_duplicates">Автоудаление дубликатов</string>
+    <string name="ui_keep_one_verified_copy_android_asks_before_deleting_files">Остаётся одна проверенная копия. Android запрашивает подтверждение удаления.</string>
+    <string name="ui_remove_all_duplicates">Удалить все дубликаты</string>
+    <string name="ui_duplicates_removed">Дубликаты удалены</string>
+    <string name="ui_delete_failed">Не удалось удалить</string>
+    <string name="ui_audiobooks_in_your_audiobooks_folder_appear_here">Здесь появятся аудиокниги из папки Audiobooks.</string>
+    <plurals name="design_albums"><item quantity="one">%1$d альбом</item><item quantity="few">%1$d альбома</item><item quantity="many">%1$d альбомов</item><item quantity="other">%1$d альбома</item></plurals>
+    <plurals name="design_artists"><item quantity="one">%1$d исполнитель</item><item quantity="few">%1$d исполнителя</item><item quantity="many">%1$d исполнителей</item><item quantity="other">%1$d исполнителя</item></plurals>
+    <plurals name="design_tracks"><item quantity="one">%1$d трек</item><item quantity="few">%1$d трека</item><item quantity="many">%1$d треков</item><item quantity="other">%1$d трека</item></plurals>
 </resources>
 
 

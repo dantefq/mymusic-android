@@ -3,8 +3,17 @@ package com.example.mymusic
 import android.content.Context
 import android.content.SharedPreferences
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -58,8 +67,11 @@ private fun appTypography(name: String): Typography {
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-    val primary = remember(revision) { parseThemeColor(prefs.getString("accent", "#527BFF").orEmpty()) ?: Color(0xFF527BFF) }
-    val background = remember(revision) { parseThemeColor(prefs.getString("background", "#11151B").orEmpty()) ?: Color(0xFF11151B) }
+    val systemDark = isSystemInDarkTheme()
+    val mode = remember(revision) { prefs.getString("mode", "Dark") }
+    val defaultBackground = if (mode == "Light" || mode == "System" && !systemDark) "#F4F0E8" else "#11151B"
+    val primary = remember(revision) { parseThemeColor(prefs.getString("accent", "#2855FF").orEmpty()) ?: Color(0xFF2855FF) }
+    val background = remember(revision, defaultBackground) { parseThemeColor(prefs.getString("background", defaultBackground).orEmpty()) ?: Color(0xFF11151B) }
     val foreground = if (background.luminance() > .45f) Color(0xFF151A22) else Color(0xFFF4F0E8)
     val typography = remember(revision) { appTypography(prefs.getString("font", "Editorial").orEmpty()) }
     MaterialTheme(colorScheme = darkColorScheme(
@@ -76,55 +88,83 @@ private fun parseThemeColor(value: String): Color? =
 
 @Composable fun AppearanceSettings() {
     val prefs = LocalContext.current.getSharedPreferences("appearance", Context.MODE_PRIVATE)
-    var accentHex by remember { mutableStateOf(prefs.getString("accent", "#527BFF").orEmpty()) }
-    var backgroundHex by remember { mutableStateOf(prefs.getString("background", "#11151B").orEmpty()) }
+    val systemDark = isSystemInDarkTheme()
+    var mode by remember { mutableStateOf(prefs.getString("mode", "Dark").orEmpty()) }
+    var accentHex by remember { mutableStateOf(prefs.getString("accent", "#2855FF").orEmpty()) }
+    var backgroundHex by remember { mutableStateOf(prefs.getString("background", if (mode == "Light" || mode == "System" && !systemDark) "#F4F0E8" else "#11151B").orEmpty()) }
     var font by remember { mutableStateOf(prefs.getString("font", "Editorial").orEmpty()) }
-    Text(l("Appearance"), fontSize = 25.sp, color = white, fontFamily = headingFont)
-    Text(l("Customize colors and type"), color = muted)
-    Spacer(Modifier.height(12.dp))
-    ColorSetting(l("Accent color"), accentHex, listOf("#527BFF", "#FF987F", "#72D6BA")) { accentHex = it }
-    ColorSetting(l("Background color"), backgroundHex, listOf("#11151B", "#26303B", "#090B10")) { backgroundHex = it }
-    Button(onClick = {
-        prefs.edit().putString("accent", accentHex).putString("background", backgroundHex).apply()
-    }, enabled = parseThemeColor(accentHex) != null && parseThemeColor(backgroundHex) != null,
-        modifier = Modifier.fillMaxWidth()) { Text(l("Apply colors")) }
-    Text(l("Font"), color = white, fontFamily = headingFont, fontSize = 22.sp)
-    listOf("Editorial", "Modern", "Rounded", "Mono").forEach { name ->
-        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-            RadioButton(selected = font == name, onClick = {
-                font = name; prefs.edit().putString("font", name).apply()
-            })
-            TextButton(onClick = { font = name; prefs.edit().putString("font", name).apply() }) {
-                Text(l(name), fontFamily = chosenFont(name), color = white)
+    Column {
+        Text(l("Appearance"), fontSize = 34.sp, color = white, fontFamily = headingFont, modifier = Modifier.padding(start = 8.dp))
+        Text(l("Customize the look and feel of MyMusic."), color = muted, fontSize = 14.sp, modifier = Modifier.padding(start = 8.dp, top = 4.dp, bottom = 12.dp))
+        ConceptDivider()
+        Text(l("Theme"), color = white, fontFamily = headingFont, fontSize = 21.sp, modifier = Modifier.padding(vertical = 8.dp))
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Light" to Icons.Default.LightMode, "Dark" to Icons.Default.DarkMode, "System" to Icons.Default.PhoneAndroid).forEach { (name, icon) ->
+                Column(Modifier.weight(1f).height(72.dp).clip(RoundedCornerShape(12.dp)).background(if (mode == name) accent.copy(alpha = .14f) else panel)
+                    .border(if (mode == name) 2.dp else .5.dp, if (mode == name) accent else white.copy(alpha = .04f), RoundedCornerShape(12.dp))
+                    .clickable {
+                        mode = name; backgroundHex = if (name == "Light" || name == "System" && !systemDark) "#F4F0E8" else "#11151B"
+                        prefs.edit().putString("mode", name).remove("background").apply()
+                    }, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                    Icon(icon, null, tint = white, modifier = Modifier.size(24.dp)); Spacer(Modifier.height(6.dp)); Text(l(name), color = white, fontSize = 13.sp)
+                }
             }
         }
-    }
-    Text(l("Live preview"), color = muted)
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(16.dp)) {
-            Text("MyMusic", style = MaterialTheme.typography.headlineMedium)
-            Text(l("Your music, your style"))
+        ColorSetting(l("Accent color"), accentHex, listOf("#2855FF" to "Cobalt", "#FF987F" to "Coral", "#72D6BA" to "Mint")) {
+            accentHex = it
+            if (parseThemeColor(it) != null) prefs.edit().putString("accent", it).apply()
         }
+        ColorSetting(l("Background color"), backgroundHex, listOf("#11151B" to "Graphite", "#46525E" to "Slate", "#090B10" to "Midnight")) {
+            backgroundHex = it
+            if (parseThemeColor(it) != null) prefs.edit().putString("background", it).apply()
+        }
+        ConceptDivider(Modifier.padding(top = 6.dp))
+        Text(l("Font"), color = white, fontFamily = headingFont, fontSize = 22.sp, modifier = Modifier.padding(vertical = 8.dp))
+        Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(13.dp)).background(panel)
+            .border(.5.dp, white.copy(alpha = .09f), RoundedCornerShape(13.dp))) {
+            listOf("Editorial", "Modern", "Rounded", "Mono").forEachIndexed { index, name ->
+                Row(Modifier.fillMaxWidth().height(40.dp).background(if (font == name) raised.copy(alpha = .5f) else Color.Transparent)
+                    .clickable { font = name; prefs.edit().putString("font", name).apply() }, verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(selected = font == name, onClick = { font = name; prefs.edit().putString("font", name).apply() })
+                    Text(l(name), fontFamily = chosenFont(name), color = white, fontSize = 17.sp, modifier = Modifier.weight(1f))
+                    Text("Aa", fontFamily = chosenFont(name), color = white, fontSize = 21.sp, modifier = Modifier.padding(end = 22.dp))
+                }
+                if (index < 3) ConceptDivider(Modifier.padding(start = 46.dp, end = 14.dp))
+            }
+        }
+        Text(l("Live preview"), fontFamily = headingFont, fontSize = 22.sp, color = white, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+        Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(panel).padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Artwork(null, Modifier.size(52.dp), 4.dp); Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(l("Your music, your style"), fontFamily = chosenFont(font), color = white, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text("MyMusic", color = muted, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+            }
+            FilledIconButton(onClick = {}, colors = IconButtonDefaults.filledIconButtonColors(containerColor = accent, contentColor = MaterialTheme.colorScheme.onPrimary)) { Icon(Icons.Default.PlayArrow, null) }
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedButton(onClick = {
+            accentHex = "#2855FF"; backgroundHex = "#11151B"; font = "Editorial"; mode = "Dark"
+            prefs.edit().remove("accent").remove("background").remove("font").remove("mode").apply()
+        }, modifier = Modifier.fillMaxWidth().height(48.dp), colors = ButtonDefaults.outlinedButtonColors(contentColor = white)) { Text(l("Reset defaults"), fontFamily = headingFont, fontSize = 16.sp) }
+        Spacer(Modifier.height(12.dp))
     }
-    TextButton(onClick = {
-        accentHex = "#527BFF"; backgroundHex = "#11151B"; font = "Editorial"
-        prefs.edit().remove("accent").remove("background").remove("font").apply()
-    }) { Text(l("Reset defaults")) }
-    HorizontalDivider(color = raised)
 }
 
-@Composable private fun ColorSetting(label: String, value: String, choices: List<String>, onChange: (String) -> Unit) {
-    Text(label, color = white)
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        choices.forEach { hex ->
-            FilledTonalButton(onClick = { onChange(hex) }, shape = CircleShape,
-                contentPadding = PaddingValues(8.dp), modifier = Modifier.size(48.dp),
-                colors = ButtonDefaults.filledTonalButtonColors(containerColor = parseThemeColor(hex)!!)) {
-                Text(if (hex.equals(value, true)) "✓" else "", color = Color.White)
+@Composable private fun ColorSetting(label: String, value: String, choices: List<Pair<String, String>>, onChange: (String) -> Unit) {
+    ConceptDivider(Modifier.padding(top = 14.dp))
+    Text(label, color = white, fontFamily = headingFont, fontSize = 21.sp, modifier = Modifier.padding(top = 8.dp, bottom = 8.dp))
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        choices.forEach { (hex, name) ->
+            Column(Modifier.weight(1f).clickable { onChange(hex) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(Modifier.size(44.dp).border(if (hex.equals(value, true)) 2.dp else 1.dp,
+                    if (hex.equals(value, true)) accent else white.copy(alpha = .15f), CircleShape).padding(4.dp)
+                    .clip(CircleShape).background(parseThemeColor(hex)!!))
+                Text(l(name), color = white, fontSize = 11.sp, modifier = Modifier.padding(top = 5.dp), maxLines = 1)
             }
         }
+        OutlinedTextField(value, onChange, singleLine = true, isError = parseThemeColor(value) == null,
+            textStyle = TextStyle(fontSize = 12.sp, color = white), shape = RoundedCornerShape(10.dp),
+            modifier = Modifier.width(104.dp).height(56.dp),
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = accent, unfocusedBorderColor = muted.copy(alpha = .4f)))
     }
-    OutlinedTextField(value, onChange, label = { Text(label + " · #RRGGBB") }, singleLine = true,
-        isError = parseThemeColor(value) == null, modifier = Modifier.fillMaxWidth())
-    Spacer(Modifier.height(12.dp))
 }

@@ -16,6 +16,8 @@ fun Context.localized(english: String): String {
 
 @Composable fun l(english: String): String {
     val context = LocalContext.current
-    val id = context.resources.getIdentifier(key(english), "string", context.packageName)
+    val id = androidx.compose.runtime.remember(english, context.packageName) {
+        context.resources.getIdentifier(key(english), "string", context.packageName)
+    }
     return if (id == 0) english else stringResource(id)
 }

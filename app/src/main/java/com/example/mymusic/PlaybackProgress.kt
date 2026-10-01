@@ -7,15 +7,22 @@ import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.Player
 import kotlinx.coroutines.delay
 
-/** Only visible transport controls subscribe to the position clock. */
-@Composable fun PlaybackProgress(player: Player?, content: @Composable (Long, Long) -> Unit) {
-    var position by remember(player) { mutableLongStateOf(0) }
-    var duration by remember(player) { mutableLongStateOf(0) }
+/** Read position only in the seek rail, time labels, and lyric boundary calculation. */
+@Stable
+class PlaybackClock {
+    var position by mutableLongStateOf(0L)
+        internal set
+    var duration by mutableLongStateOf(0L)
+        internal set
+}
+
+@Composable fun rememberPlaybackClock(player: Player?): PlaybackClock {
+    val clock = remember(player) { PlaybackClock() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(player) {
         fun refresh() {
-            position = player?.currentPosition?.coerceAtLeast(0) ?: 0
-            duration = player?.duration?.coerceAtLeast(0) ?: 0
+            clock.position = player?.currentPosition?.coerceAtLeast(0) ?: 0L
+            clock.duration = player?.duration?.coerceAtLeast(0) ?: 0L
         }
         val listener = object : Player.Listener {
             override fun onEvents(player: Player, events: Player.Events) = refresh()
@@ -27,10 +34,10 @@ import kotlinx.coroutines.delay
     LaunchedEffect(player, lifecycle) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
-                if (player?.isPlaying == true) position = player.currentPosition.coerceAtLeast(0)
-                delay(250)
+                if (player?.isPlaying == true) clock.position = player.currentPosition.coerceAtLeast(0)
+                delay(if (player?.isPlaying == true) 50 else 250)
             }
         }
     }
-    content(position, duration)
+    return clock
 }

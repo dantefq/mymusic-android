@@ -17,6 +17,16 @@ import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 
 data class DuplicateGroup(val hash: String, val tracks: List<Track>)
+data class DuplicateReplacement(val remove: Track, val keep: Track)
+
+/** Keeps the playing copy, then a playlist copy, then the oldest stable MediaStore entry. */
+fun duplicateCleanupPlan(groups: List<DuplicateGroup>, activeId: Long?, playlistIds: Set<Long>): List<DuplicateReplacement> =
+    groups.flatMap { group ->
+        val ordered = group.tracks.distinctBy { it.id }.sortedWith(
+            compareByDescending<Track> { it.id == activeId }.thenByDescending { it.id in playlistIds }
+                .thenBy { it.addedAt }.thenBy { it.id })
+        ordered.drop(1).map { DuplicateReplacement(it, ordered.first()) }
+    }
 
 object DuplicateScanner {
     suspend fun scan(context: Context, tracks: List<Track>): List<DuplicateGroup> = withContext(Dispatchers.IO) {
@@ -44,13 +54,20 @@ object DuplicateScanner {
 }
 
 @Composable fun DuplicatesScreen(groups: List<DuplicateGroup>?, onScan: () -> Unit,
-    onDelete: (Track) -> Unit, modifier: Modifier = Modifier) {
+    onDelete: (Track) -> Unit, onCleanAll: () -> Unit, autoDelete: Boolean, onAutoDelete: (Boolean) -> Unit,
+    scanning: Boolean, modifier: Modifier = Modifier) {
     LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 25.dp)) {
         item {
             CollectionHeader(l("Duplicates"), l("Exact SHA-256 matches. Review before deleting."))
-            Button(onClick = onScan, modifier = Modifier.padding(horizontal = 24.dp)) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 24.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) { Text(l("Auto-delete duplicates"), color = white); Text(l("Keep one verified copy. Android asks before deleting files."), color = muted, fontSize = 12.sp) }
+                Switch(autoDelete, onCheckedChange = onAutoDelete)
+            }
+            Button(onClick = onScan, enabled = !scanning, modifier = Modifier.padding(horizontal = 24.dp)) {
                 Text(if (groups == null) l("Scan files") else l("Scan again"))
             }
+            if (!groups.isNullOrEmpty()) ConceptButton(l("Remove all duplicates"), onCleanAll, Modifier.padding(horizontal = 24.dp).fillMaxWidth(), enabled = !scanning)
+            if (scanning) LinearProgressIndicator(Modifier.fillMaxWidth().padding(horizontal = 24.dp))
             Spacer(Modifier.height(22.dp))
             if (groups != null && groups.isEmpty()) Text(l("No exact duplicates found"),
                 color = muted, modifier = Modifier.padding(horizontal = 24.dp))
