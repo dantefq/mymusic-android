@@ -113,4 +113,5 @@
     <string name="ui_sleep_timer_set">Sleep timer set</string>
     <string name="ui_language">Language</string>
     <string name="ui_system_default">System default</string>
+    <string name="duplicate_cleanup_android11">Duplicate cleanup requires Android 11 or newer</string>
 </resources>

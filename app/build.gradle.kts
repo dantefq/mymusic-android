@@ -12,11 +12,22 @@ android {
         applicationId = "com.example.mymusic"
         minSdk = 29
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.0.2-preview"
+        versionCode = 4
+        versionName = "1.0.3-preview"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true }
+    buildTypes {
+        create("performance") {
+            initWith(getByName("release"))
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            signingConfig = signingConfigs.getByName("debug")
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"))
+            matchingFallbacks += "release"
+        }
+    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -26,6 +26,7 @@ import androidx.media3.common.MediaMetadata
 import kotlinx.coroutines.withContext
 import androidx.media3.session.DefaultMediaNotificationProvider
 
+@androidx.annotation.OptIn(markerClass = [androidx.media3.common.util.UnstableApi::class])
 class PlaybackService : MediaSessionService() {
     companion object { const val ACTION_ROUTE = "com.example.mymusic.ROUTE" }
     private lateinit var player: ExoPlayer

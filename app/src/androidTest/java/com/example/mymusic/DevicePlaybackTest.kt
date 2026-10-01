@@ -2,6 +2,14 @@ package com.example.mymusic
 
 import android.content.ContentValues
 import android.content.ComponentName
+import android.app.Instrumentation
+import android.graphics.Rect
+import android.os.Bundle
+import android.os.SystemClock
+import android.view.InputDevice
+import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.accessibility.AccessibilityNodeInfo
 import android.net.Uri
 import android.provider.MediaStore
 import android.view.ViewGroup
@@ -96,6 +104,7 @@ class DevicePlaybackTest {
                 assertEquals(1, lyricIndex(parseLrc(fixtureTracks.first().lyrics!!), clock!!.position))
                 controller.pause()
             }
+            verifySongListsAndPlayer(instrumentation, controller, fixtureTracks, clock!!)
             val inspectionSeconds = InstrumentationRegistry.getArguments().getString("inspectionSeconds", "0").toInt().coerceIn(0, 240)
             if (inspectionSeconds > 0) Thread.sleep(inspectionSeconds * 1000L)
         } finally {
@@ -116,6 +125,82 @@ class DevicePlaybackTest {
             db.plays().deleteTracks(ids)
             ids.forEach { db.playlists().removeTrackReferences(it); context.getSharedPreferences("lyrics_timing", 0).edit().remove("$it").apply() }
             scenario.close()
+        }
+    }
+
+    private fun verifySongListsAndPlayer(instrumentation: Instrumentation, player: MediaController,
+        tracks: List<Track>, clock: PlaybackClock) {
+        val context = instrumentation.targetContext
+        fun nodes(): List<AccessibilityNodeInfo> {
+            fun flatten(node: AccessibilityNodeInfo): List<AccessibilityNodeInfo> =
+                listOf(node) + (0 until node.childCount).flatMap { index ->
+                    node.getChild(index)?.let(::flatten).orEmpty()
+                }
+            return instrumentation.uiAutomation.rootInActiveWindow?.let(::flatten).orEmpty()
+        }
+        fun waitFor(description: String, predicate: () -> Boolean) {
+            val end = SystemClock.uptimeMillis() + 8000
+            while (!predicate() && SystemClock.uptimeMillis() < end) Thread.sleep(50)
+            assertTrue(description, predicate())
+        }
+        fun text(value: String) = nodes().filter { it.isVisibleToUser && it.text?.toString() == value }
+        fun description(value: String) = nodes().any { it.isVisibleToUser && it.contentDescription?.toString() == value }
+        fun tap(node: AccessibilityNodeInfo, horizontalFraction: Float = .5f) {
+            val bounds = Rect().also(node::getBoundsInScreen)
+            val down = SystemClock.uptimeMillis()
+            val x = bounds.left + bounds.width() * horizontalFraction
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, x, bounds.exactCenterY(), 0).apply {
+                    source = InputDevice.SOURCE_TOUCHSCREEN
+                    assertTrue(instrumentation.uiAutomation.injectInputEvent(this, true))
+                    recycle()
+                }
+            }
+        }
+        fun back() {
+            instrumentation.sendKeyDownUpSync(KeyEvent.KEYCODE_BACK)
+        }
+        fun currentId(): Long? {
+            var id: Long? = null
+            instrumentation.runOnMainSync { id = player.currentMediaItem?.mediaId?.toLongOrNull() }
+            return id
+        }
+        waitFor("Library must be visible") { text(context.localized("All Tracks")).isNotEmpty() }
+        if (text(tracks[1].title).isEmpty()) tap(text(context.localized("All Tracks")).first())
+        waitFor("Expanded list must show fixture songs") { text(tracks[1].title).isNotEmpty() }
+        tap(text(tracks[1].title).first())
+        waitFor("Song title must play instead of navigating") { currentId() == tracks[1].id }
+        assertTrue(text(context.localized("All Tracks")).isNotEmpty())
+        val credits = artistNames(tracks[0]).joinToString(" · ")
+        tap(text(credits).first())
+        waitFor("Song artist credits must play instead of navigating") { currentId() == tracks[0].id }
+        assertTrue(text(context.localized("All Tracks")).isNotEmpty())
+        instrumentation.runOnMainSync { player.pause() }
+        // The lower occurrence is the mini-player, below the library's song row.
+        waitFor("Mini-player metadata must follow the selected song") { text(tracks[0].title).size >= 2 }
+        val miniTitle = text(tracks[0].title).maxBy { Rect().also(it::getBoundsInScreen).top }
+        tap(miniTitle)
+        waitFor("Mini-player title must open full-screen playback") { description(context.localized("Back to library")) }
+        Thread.sleep(400)
+        tap(text(credits).single(), .2f)
+        waitFor("Full-screen artist link must open the artist") { text("QA Artist A").isNotEmpty() && description(context.localized("Back")) }
+        back()
+        waitFor("Artist Back must return to full-screen playback") { description(context.localized("Back to library")) }
+        Thread.sleep(400)
+        tap(text("QA Album").single())
+        waitFor("Full-screen album link must open the album") { text("QA Album").isNotEmpty() && description(context.localized("Back")) }
+        back()
+        waitFor("Album Back must return to full-screen playback") { description(context.localized("Back to library")) }
+        Thread.sleep(400)
+        val seek = nodes().first { it.rangeInfo?.max?.let { max -> max > 20_000 } == true }
+        assertTrue("Seek rail must support accessible seeking", seek.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id,
+            Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 5500f) }))
+        waitFor("Paused seeking must update both player and clock") {
+            var correct = false
+            instrumentation.runOnMainSync {
+                correct = kotlin.math.abs(player.currentPosition - 5500) < 150 && kotlin.math.abs(clock.position - 5500) < 150
+            }
+            correct
         }
     }
 

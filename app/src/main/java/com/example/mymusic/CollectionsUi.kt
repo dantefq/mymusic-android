@@ -64,16 +64,15 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
     }
 }
 
-@Composable fun CollectionTrack(track: Track, onClick: () -> Unit, modifier: Modifier = Modifier,
-    onAlbum: (Track) -> Unit = {}, onArtist: (String) -> Unit = {}) {
+@Composable fun CollectionTrack(track: Track, onClick: () -> Unit, modifier: Modifier = Modifier) {
     Row(modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).clickable(onClick = onClick)
         .padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
         Artwork(track, Modifier.size(48.dp), 5.dp)
         Spacer(Modifier.width(13.dp))
         Column(Modifier.weight(1f)) {
             Text(track.title, color = white, fontFamily = headingFont, maxLines = 1,
-                overflow = TextOverflow.Ellipsis, modifier = Modifier.clickable { onAlbum(track) })
-            ArtistLinks(track, onArtist, size = 12)
+                overflow = TextOverflow.Ellipsis)
+            ArtistCredits(track, size = 12)
         }
         IconButton(onClick = onClick) { Icon(Icons.Default.PlayArrow, l("Play"), tint = accent) }
     }
@@ -89,12 +88,11 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
 }
 
 @Composable fun AudiobooksScreen(tracks: List<Track>, onPlay: (List<Track>, Track) -> Unit,
-    onAlbum: (Track) -> Unit, onArtist: (String) -> Unit,
     modifier: Modifier = Modifier) {
     val books = remember(tracks) { tracks.filter { it.isAudiobook } }
     LazyColumn(modifier.fillMaxSize()) {
         item { CollectionHeader(l("Audiobooks"), stringResource(R.string.songs_count, books.size)) }
-        items(books, key = { it.id }, contentType = { "book" }) { track -> CollectionTrack(track, { onPlay(books, track) }, onAlbum = onAlbum, onArtist = onArtist) }
+        items(books, key = { it.id }, contentType = { "book" }) { track -> CollectionTrack(track, { onPlay(books, track) }) }
         if (books.isEmpty()) item { Text(l("Audiobooks in your Audiobooks folder appear here."), color = muted, modifier = Modifier.padding(horizontal = 24.dp)) }
     }
 }
@@ -185,18 +183,18 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
 }
 
 @Composable fun PlaylistsScreen(db: MusicDb, tracks: List<Track>, onPlay: (List<Track>, Track) -> Unit,
-    onAlbum: (Track) -> Unit, onArtist: (String) -> Unit,
     modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val playlists by db.playlists().observe().collectAsStateWithLifecycle(emptyList())
+    val playlists by remember(db) { db.playlists().observe() }.collectAsStateWithLifecycle(emptyList())
     var selected by remember { mutableStateOf<Playlist?>(null) }
     var create by remember { mutableStateOf(false) }
     var add by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var name by remember { mutableStateOf("") }
-    val entries by (selected?.let { db.playlists().entries(it.id) }
-        ?: kotlinx.coroutines.flow.flowOf(emptyList())).collectAsStateWithLifecycle(emptyList())
+    val entries by remember(db, selected?.id) {
+        selected?.let { db.playlists().entries(it.id) } ?: kotlinx.coroutines.flow.flowOf(emptyList())
+    }.collectAsStateWithLifecycle(emptyList())
     val byId = remember(tracks) { tracks.associateBy { it.id } }
     val ordered = remember(entries, byId) { entries.mapNotNull { byId[it.trackId] } }
     Column(modifier.fillMaxSize()) {
@@ -264,7 +262,7 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
                                 }
                                 dx = 0f
                             })
-                        }, onAlbum = onAlbum, onArtist = onArtist)
+                        })
                 }
             }
         } else LazyColumn {

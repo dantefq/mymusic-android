@@ -11,14 +11,22 @@ import androidx.compose.ui.unit.sp
 import java.util.Locale
 
 fun sortedTracks(tracks: List<Track>, field: String, descending: Boolean, lossless: Boolean): List<Track> {
+    val filtered = if (lossless) tracks.filter { it.isLossless() } else tracks
+    if (field != "Date added" && field != "Duration") {
+        // Normalize once per track, instead of allocating strings on every comparison.
+        val keyed = filtered.map { track -> track to when (field) {
+            "Artist" -> track.artist
+            "Album" -> track.album
+            else -> track.title
+        }.lowercase(Locale.ROOT) }
+        val comparator = compareBy<Pair<Track, String>> { it.second }.thenBy { it.first.id }
+        return keyed.sortedWith(if (descending) comparator.reversed() else comparator).map { it.first }
+    }
     val comparator = when (field) {
         "Date added" -> compareBy<Track> { it.addedAt }
-        "Artist" -> compareBy { it.artist.lowercase(Locale.ROOT) }
-        "Duration" -> compareBy { it.durationMs }
-        "Album" -> compareBy { it.album.lowercase(Locale.ROOT) }
-        else -> compareBy { it.title.lowercase(Locale.ROOT) }
+        else -> compareBy { it.durationMs }
     }.thenBy { it.id }
-    return tracks.filter { !lossless || it.isLossless() }.sortedWith(if (descending) comparator.reversed() else comparator)
+    return filtered.sortedWith(if (descending) comparator.reversed() else comparator)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

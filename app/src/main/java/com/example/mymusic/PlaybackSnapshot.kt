@@ -7,23 +7,45 @@ import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import org.json.JSONArray
 import org.json.JSONObject
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 /** Queue is written only when it changes; the small position record is updated separately. */
 class PlaybackSnapshot(context: Context) {
     private val prefs = context.getSharedPreferences("last_playback", Context.MODE_PRIVATE)
+    // Finite writes can finish after the service stops, preserving the final queue.
+    private val writes = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val queueMutex = Mutex()
+    private var queueWrite: Job? = null
 
     fun saveQueue(player: Player) {
-        val queue = JSONArray()
-        repeat(player.mediaItemCount) { index ->
-            val item = player.getMediaItemAt(index)
-            queue.put(JSONObject().put("id", item.mediaId)
-                .put("uri", item.localConfiguration?.uri?.toString().orEmpty())
-                .put("title", item.mediaMetadata.title?.toString().orEmpty())
-                .put("artist", item.mediaMetadata.artist?.toString().orEmpty())
-                .put("album", item.mediaMetadata.albumTitle?.toString().orEmpty())
-                .put("art", item.mediaMetadata.artworkUri?.toString().orEmpty()))
+        // Player access stays on its application thread; JSON work runs off the UI thread.
+        val items = (0 until player.mediaItemCount).map(player::getMediaItemAt)
+        queueWrite?.cancel()
+        queueWrite = writes.launch {
+            queueMutex.withLock {
+                val queue = JSONArray()
+                items.forEach { item ->
+                    currentCoroutineContext().ensureActive()
+                    queue.put(JSONObject().put("id", item.mediaId)
+                        .put("uri", item.localConfiguration?.uri?.toString().orEmpty())
+                        .put("title", item.mediaMetadata.title?.toString().orEmpty())
+                        .put("artist", item.mediaMetadata.artist?.toString().orEmpty())
+                        .put("album", item.mediaMetadata.albumTitle?.toString().orEmpty())
+                        .put("art", item.mediaMetadata.artworkUri?.toString().orEmpty()))
+                }
+                val serialized = queue.toString()
+                currentCoroutineContext().ensureActive()
+                prefs.edit().putString("queue", serialized).apply()
+            }
         }
-        prefs.edit().putString("queue", queue.toString()).apply()
         savePosition(player)
     }
 

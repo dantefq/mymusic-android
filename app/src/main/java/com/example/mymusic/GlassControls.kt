@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -30,6 +31,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.roundToLong
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 @Composable internal fun SmartMixButton(onClick: () -> Unit, enabled: Boolean) {
@@ -73,16 +75,19 @@ import kotlin.math.sin
 @Composable internal fun MiniProgressRail(clock: PlaybackClock) {
     val color = accent
     val trackColor = white.copy(alpha = .08f)
-    Canvas(Modifier.fillMaxWidth().height(2.dp)) {
-        drawRect(trackColor)
-        val fraction = if (clock.duration > 0) (clock.position.toFloat() / clock.duration).coerceIn(0f, 1f) else 0f
-        drawRect(color, size = Size(size.width * fraction, size.height))
-    }
+    Spacer(Modifier.fillMaxWidth().height(2.dp).drawWithCache {
+        val width = size.width.roundToInt()
+        val pixels = derivedStateOf(structuralEqualityPolicy()) { progressPixels(clock.position, clock.duration, width) }
+        onDrawBehind {
+            drawRect(trackColor)
+            drawRect(color, size = Size(pixels.value.toFloat(), size.height))
+        }
+    })
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable internal fun GlassSeekBar(clock: PlaybackClock, trackId: Long, enabled: Boolean, onSeek: (Long) -> Unit) {
-    var scrub by remember(trackId) { mutableStateOf<Float?>(null) }
+    val scrub = remember(trackId) { mutableStateOf<Float?>(null) }
     val total = clock.duration.coerceAtLeast(1L).toFloat()
     val color = accent
     val foreground = white
@@ -92,37 +97,59 @@ import kotlin.math.sin
             .background(Brush.verticalGradient(listOf(foreground.copy(alpha = .09f), foreground.copy(alpha = .025f))))
             .border(.5.dp, Brush.verticalGradient(listOf(foreground.copy(alpha = .3f), foreground.copy(alpha = .06f))), shape)
             .padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
-            Slider(value = scrub ?: clock.position.toFloat().coerceIn(0f, total), onValueChange = { scrub = it },
-                onValueChangeFinished = { scrub?.let { onSeek(it.roundToLong()) }; scrub = null }, valueRange = 0f..total,
-                modifier = Modifier.fillMaxWidth(), enabled = enabled,
-                thumb = { Canvas(Modifier.size(18.dp)) {
-                    drawCircle(color.copy(alpha = .25f))
-                    drawCircle(Color.White, radius = size.minDimension * .28f)
-                    drawCircle(color, radius = size.minDimension * .16f)
-                } },
-                track = { state ->
-                    Canvas(Modifier.fillMaxWidth().height(28.dp)) {
-                        val fraction = (state.value / total).coerceIn(0f, 1f)
-                        val count = 64
-                        val pitch = size.width / count
-                        repeat(count) { index ->
-                            // Decorative rhythm pattern; no expensive audio decoding while dragging.
-                            val amplitude = .22f + .65f * kotlin.math.abs(sin(index * .64f + (trackId % 17)))
-                            val barHeight = size.height * amplitude
-                            drawRoundRect(if (index.toFloat() / count <= fraction) color else foreground.copy(alpha = .23f),
-                                Offset(index * pitch, (size.height - barHeight) / 2), Size(pitch * .42f, barHeight), CornerRadius(pitch))
-                        }
+            // Cache waveform geometry. Position is read only in drawing; the invisible
+            // Material slider retains touch handling, keyboard control and accessibility.
+            Spacer(Modifier.fillMaxWidth().height(28.dp).drawWithCache {
+                val inset = 9.dp.toPx()
+                val width = (size.width - inset * 2).coerceAtLeast(0f)
+                val playbackPixels = derivedStateOf(structuralEqualityPolicy()) {
+                    progressPixels(clock.position, clock.duration, width.roundToInt())
+                }
+                val pitch = width / 64
+                val heights = FloatArray(64) { index ->
+                    size.height * (.22f + .65f * kotlin.math.abs(sin(index * .64f + (trackId % 17))))
+                }
+                val inactiveColor = foreground.copy(alpha = .23f)
+                val barSize = pitch * .42f
+                val corner = CornerRadius(pitch)
+                onDrawBehind {
+                    val fraction = (scrub.value?.div(total)
+                        ?: (playbackPixels.value / width.coerceAtLeast(1f))).coerceIn(0f, 1f)
+                    val rtl = layoutDirection == androidx.compose.ui.unit.LayoutDirection.Rtl
+                    heights.forEachIndexed { index, height ->
+                        val x = inset + if (rtl) width - index * pitch - barSize else index * pitch
+                        drawRoundRect(if (index.toFloat() / 64 <= fraction) color else inactiveColor,
+                            Offset(x, (size.height - height) / 2), Size(barSize, height), corner)
                     }
-                })
+                    val thumbX = inset + width * if (rtl) 1f - fraction else fraction
+                    val center = Offset(thumbX, size.height / 2)
+                    drawCircle(color.copy(alpha = .25f), radius = inset, center = center)
+                    drawCircle(Color.White, radius = inset * .56f, center = center)
+                    drawCircle(color, radius = inset * .32f, center = center)
+                }
+            })
+            SeekInput(clock, scrub, total, enabled, onSeek)
         }
         PlaybackTimeLabels(clock, scrub)
     }
 }
 
-@Composable private fun PlaybackTimeLabels(clock: PlaybackClock, scrub: Float?) {
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable private fun SeekInput(clock: PlaybackClock, scrub: MutableState<Float?>, total: Float,
+    enabled: Boolean, onSeek: (Long) -> Unit) {
+    val seconds by remember(clock) { derivedStateOf { clock.position / 1000 } }
+    Slider(value = scrub.value ?: (seconds * 1000).toFloat().coerceIn(0f, total),
+        onValueChange = { scrub.value = it },
+        onValueChangeFinished = { scrub.value?.let { onSeek(it.roundToLong()) }; scrub.value = null },
+        valueRange = 0f..total, modifier = Modifier.fillMaxWidth(), enabled = enabled && clock.duration > 0,
+        thumb = { Spacer(Modifier.size(18.dp)) },
+        track = { Spacer(Modifier.fillMaxWidth().height(28.dp)) })
+}
+
+@Composable private fun PlaybackTimeLabels(clock: PlaybackClock, scrub: State<Float?>) {
     val seconds by remember(clock) { derivedStateOf { clock.position / 1000 } }
     Row(Modifier.fillMaxWidth().padding(top = 7.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(formatTime(scrub?.roundToLong() ?: seconds * 1000), color = muted, fontSize = 11.sp)
+        Text(formatTime(scrub.value?.roundToLong() ?: seconds * 1000), color = muted, fontSize = 11.sp)
         Text(formatTime(clock.duration), color = muted, fontSize = 11.sp)
     }
 }

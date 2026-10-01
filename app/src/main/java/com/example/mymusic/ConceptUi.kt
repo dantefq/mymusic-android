@@ -35,6 +35,11 @@ import coil.request.ImageRequest
 @Composable internal fun artistCount(count: Int) = pluralStringResource(R.plurals.design_artists, count, count)
 @Composable internal fun trackCount(count: Int) = pluralStringResource(R.plurals.design_tracks, count, count)
 
+@Composable internal fun ArtistCredits(track: Track, modifier: Modifier = Modifier, size: Int = 13) {
+    val credits = remember(track.artist, track.title) { artistNames(track).joinToString(" · ") }
+    Text(credits, modifier, color = muted, fontSize = size.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+}
+
 @Composable internal fun ArtistLinks(track: Track, onArtist: (String) -> Unit, modifier: Modifier = Modifier, size: Int = 13) {
     val names = remember(track.artist, track.title) { artistNames(track) }
     val color = muted
@@ -92,9 +97,10 @@ import coil.request.ImageRequest
 }
 
 @Composable internal fun Artwork(track: Track?, modifier: Modifier, radius: Dp) {
+    var loaded by remember(track?.artUri) { mutableStateOf(false) }
     Box(modifier.clip(RoundedCornerShape(radius)).background(panel)) {
         // Original geometric fallback keeps missing artwork consistent with the approved visual style.
-        Canvas(Modifier.fillMaxSize()) {
+        if (!loaded) Canvas(Modifier.fillMaxSize()) {
             val w = size.width; val h = size.height
             val cobalt = Color(0xFF2855FF); val cream = Color(0xFFF4E5CA); val coral = Color(0xFFFF987F)
             drawRect(Color(0xFF12243B))
@@ -117,10 +123,10 @@ import coil.request.ImageRequest
         if (track?.artUri != null) {
             val context = LocalContext.current
             val request = remember(context, track.artUri) {
-                ImageRequest.Builder(context).data(track.artUri).crossfade(280).build()
+                ImageRequest.Builder(context).data(track.artUri).crossfade(160).build()
             }
             AsyncImage(request, contentDescription = l("Album artwork"), contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize())
+                modifier = Modifier.fillMaxSize(), onSuccess = { loaded = true }, onError = { loaded = false })
         }
     }
 }

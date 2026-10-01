@@ -10,6 +10,8 @@ An offline-first Android music player built with Kotlin, Jetpack Compose, Media3
 
 From a terminal, run `./gradlew :app:assembleDebug` (or `gradlew.bat :app:assembleDebug` on Windows). The APK is created at `app/build/outputs/apk/debug/app-debug.apk`.
 
+For checking scrolling and animation performance, use `./gradlew :app:assemblePerformance`. This creates `app/build/outputs/apk/performance/app-performance.apk` with R8 optimization and resource shrinking, without debugger overhead. It uses the same development signing key as the debug build and can update it in place.
+
 Metadata lookup is optional and uses MusicBrainz, Cover Art Archive, and LRCLIB. No API credentials are required.
 
 ## Library and playback
@@ -18,7 +20,8 @@ Metadata lookup is optional and uses MusicBrainz, Cover Art Archive, and LRCLIB.
 - The library has search, a lossless filter, a mini-player, an expanded player, a queue, and an output-device picker. Swipe up on the mini-player, down on the full player, or sideways on album art. Long-press the mini-player to open the queue.
 - **Smart play** starts an automatically generated queue using local listening data. Search playback continues with random local music. Both queues refill in the playback service.
 - Home shows independently expandable All Tracks and Artists sections. Tracks can be sorted by name, date added, artist, duration, or album, with an optional lossless filter. Audiobooks have their own bottom navigation tab.
-- Tap a track title to open its album, or an artist name to browse that artist's tracks. Albums use MediaStore album IDs and album tags; explicit collaboration credits appear under each credited artist.
+- Tap a song row, including its title or artist credits, to play it. Artist and album links in song metadata are available in the full-screen player. Albums use MediaStore album IDs and album tags; explicit collaboration credits appear under each credited artist.
+- In the full-screen player, tap the title or album name to open the album, or tap an artist credit to open that artist. Back returns to the player. Tapping the minimized player's artwork or metadata opens the full player.
 - The last queue, track, and position are restored on launch, paused until you press play. Listening stats show the top tracks and artists for the last week or month.
 - Playlists support adding songs, long-press drag reordering, and sideways swipe removal. A local `playlists-backup.json` is rewritten when playlists change, with a second copy in `Downloads/MyMusic` that survives uninstall. Settings can export or restore it through Android's document picker.
 - The duplicate finder computes SHA-256 over file contents and groups exact matches. Optional automatic cleanup keeps one copy, prioritizing the playing track and playlist references. Android asks for confirmation before deleting files owned by other apps.
@@ -36,7 +39,7 @@ The equalizer and BassBoost use Android's audio effects on the active Media3 aud
 
 ## Verification and limits
 
-`./gradlew :app:testDebugUnitTest` runs 11 local tests for smart mixes, random continuation, album/artist grouping, sorting, lyric timing, and duplicate retention. The redesign was installed through Android Studio on a physical Samsung Galaxy A51 (Android 13). Smart Mix appearance, playback, next/previous, and pause were verified without recorded crashes. Exhaustive device verification of every feature remains pending. An instrumentation test is included for isolated playback-clock and duplicate-file fixtures.
+`./gradlew :app:testDebugUnitTest` runs 22 local tests for smart mixes, random continuation, album/artist grouping, sorting, lyric timing, duplicate retention, indexed browsing, full-player navigation, and progress rendering. The optimized performance build was installed and tested on a physical Samsung Galaxy A51 (Android 13). Song-list metadata taps play songs; full-player artist and album links open their collections, and Back returns to the player. The device instrumentation test verifies these interactions, paused seeking, playback-clock synchronization, and duplicate-file fixtures, restoring the queue and removing its temporary tracks afterward. Earlier checks also covered Smart Mix, next/previous, and pause. Exhaustive verification of every feature and large-library performance remains pending.
 
 Download the installable APK from [GitHub Releases](https://github.com/dantefq/mymusic-android/releases). Preview APKs are development builds signed with the development key; they are not production releases.
 
