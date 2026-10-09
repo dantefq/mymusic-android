@@ -14,7 +14,8 @@ data class LocalTags(
     val lyrics: String? = null,
     val genre: String? = null,
     val albumArtist: String? = null,
-    val trackNumber: Int? = null
+    val trackNumber: Int? = null,
+    val author: String? = null
 )
 
 internal fun String?.tagValue(): String? = this?.trim()?.takeIf {
@@ -37,7 +38,9 @@ class LocalTagReader(private val context: Context) {
                     null,
                     retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE).tagValue(),
                     retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST).tagValue(),
-                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)?.substringBefore('/')?.toIntOrNull()
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER)?.substringBefore('/')?.toIntOrNull(),
+                    retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_AUTHOR).tagValue()
+                        ?: retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_WRITER).tagValue()
                 )
             } finally { retriever.release() }
         }.getOrDefault(LocalTags())
@@ -49,7 +52,8 @@ class LocalTagReader(private val context: Context) {
             sidecar.lyrics,
             embedded.genre ?: sidecar.genre,
             embedded.albumArtist ?: sidecar.albumArtist,
-            embedded.trackNumber ?: sidecar.trackNumber
+            embedded.trackNumber ?: sidecar.trackNumber,
+            embedded.author ?: sidecar.author
         )
     }
 
@@ -70,7 +74,8 @@ class LocalTagReader(private val context: Context) {
             lyrics.tagValue() ?: json?.optString("lyrics").tagValue(),
             json?.optString("genre").tagValue(),
             json?.optString("albumArtist").tagValue(),
-            json?.optInt("trackNumber")?.takeIf { it > 0 }
+            json?.optInt("trackNumber")?.takeIf { it > 0 },
+            json?.optString("author").tagValue()
         )
     }
 

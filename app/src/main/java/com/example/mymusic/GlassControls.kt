@@ -86,10 +86,10 @@ import kotlin.math.sin
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
-@Composable internal fun GlassSeekBar(clock: PlaybackClock, trackId: Long, enabled: Boolean, onSeek: (Long) -> Unit) {
+@Composable internal fun GlassSeekBar(clock: PlaybackClock, trackId: Long, enabled: Boolean, onSeek: (Long) -> Unit, tint: Color = accent) {
     val scrub = remember(trackId) { mutableStateOf<Float?>(null) }
     val total = clock.duration.coerceAtLeast(1L).toFloat()
-    val color = accent
+    val color = tint
     val foreground = white
     val shape = RoundedCornerShape(16.dp)
     Column(Modifier.padding(top = 14.dp)) {

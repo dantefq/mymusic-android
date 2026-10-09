@@ -39,6 +39,7 @@ class PlaybackService : MediaSessionService() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var crossfadeJob: Job? = null
     private val snapshot by lazy { PlaybackSnapshot(this) }
+    private val bookmarks by lazy { BookBookmarks(this) }
     private var restoring = true
     private val metadata by lazy { Metadata(this, MusicDb.get(this).tracks()) }
 
@@ -52,6 +53,8 @@ class PlaybackService : MediaSessionService() {
             addListener(object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) {
                     if (!restoring) {
+                        bookmarks.save(player)
+                        if (player.playbackState == Player.STATE_ENDED) finishChapterTimer(player.currentMediaItem)
                         if (events.contains(Player.EVENT_TIMELINE_CHANGED)) snapshot.saveQueue(player)
                         else if (events.contains(Player.EVENT_POSITION_DISCONTINUITY) ||
                             events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED) ||
@@ -63,7 +66,25 @@ class PlaybackService : MediaSessionService() {
                         PlayerWidget.update(this@PlaybackService, player.currentMediaItem, player.isPlaying)
                     }
                 }
+                override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
+                    if (restoring) return
+                    if (reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION) {
+                        bookmarks.markCompleted(oldPosition.mediaItem)
+                        finishChapterTimer(oldPosition.mediaItem)
+                    } else if (oldPosition.mediaItem?.mediaId != newPosition.mediaItem?.mediaId) {
+                        val prefs = getSharedPreferences("playback", MODE_PRIVATE)
+                        prefs.edit().remove("sleep_chapter").remove("sleep_book").apply()
+                    }
+                    // Media3 supplies the old item even when a controller replaces the whole queue.
+                    bookmarks.save(oldPosition.mediaItem, oldPosition.positionMs)
+                    bookmarks.save(newPosition.mediaItem, newPosition.positionMs)
+                }
                 override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                    if (mediaItem?.mediaMetadata?.extras?.getString(BOOK_KEY) != null) {
+                        crossfadeJob?.cancel()
+                        player.volume = 1f
+                        overlapPlayer.stop()
+                    }
                     if (restoring) return
                     val id = mediaItem?.mediaId?.toLongOrNull() ?: return
                     scope.launch(Dispatchers.IO) {
@@ -97,7 +118,10 @@ class PlaybackService : MediaSessionService() {
         scope.launch {
             val prefs = getSharedPreferences("playback", MODE_PRIVATE)
             while (true) {
-                if (player.isPlaying) snapshot.savePosition(player)
+                if (player.isPlaying) {
+                    snapshot.savePosition(player)
+                    bookmarks.save(player)
+                }
                 val queueMode = prefs.getString("queue_mode", "off")
                 if (queueMode in listOf("random", "smart") && player.mediaItemCount > 0 &&
                     player.mediaItemCount - player.currentMediaItemIndex <= 3) {
@@ -127,7 +151,8 @@ class PlaybackService : MediaSessionService() {
                     prefs.edit().putLong("sleep_until", 0).apply()
                 }
                 val seconds = prefs.getInt("crossfade", 0)
-                if (seconds > 0 && crossfadeJob?.isActive != true && player.isPlaying &&
+                if (seconds > 0 && player.currentMediaItem?.mediaMetadata?.extras?.getString(BOOK_KEY) == null &&
+                    crossfadeJob?.isActive != true && player.isPlaying &&
                     player.hasNextMediaItem() && player.duration > 0 &&
                     player.duration - player.currentPosition in 1..(seconds * 1000L)) {
                     crossfadeJob = scope.launch { crossfade(seconds * 1000L) }
@@ -167,6 +192,16 @@ class PlaybackService : MediaSessionService() {
         overlapPlayer.stop()
     }
 
+    private fun finishChapterTimer(item: MediaItem?) {
+        if (item == null) return
+        val prefs = getSharedPreferences("playback", MODE_PRIVATE)
+        if (prefs.getLong("sleep_chapter", 0) > 0 && prefs.getLong("sleep_chapter", 0).toString() == item.mediaId &&
+            prefs.getString("sleep_book", "") == item.mediaMetadata.extras?.getString(BOOK_KEY)) {
+            player.pause()
+            prefs.edit().remove("sleep_chapter").remove("sleep_book").apply()
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == ACTION_ROUTE) {
             val id = intent.getIntExtra("device_id", -1)
@@ -194,11 +229,13 @@ class PlaybackService : MediaSessionService() {
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = session
 
     override fun onTaskRemoved(rootIntent: Intent?) {
+        bookmarks.save(player)
         snapshot.savePosition(player)
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
+        bookmarks.save(player)
         snapshot.savePosition(player)
         AudioEffects.equalizer = null; AudioEffects.bassBoost = null; AudioEffects.loudnessEnhancer = null
         equalizer?.release(); bassBoost?.release(); loudnessEnhancer?.release()

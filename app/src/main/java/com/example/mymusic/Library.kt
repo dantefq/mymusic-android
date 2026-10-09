@@ -29,7 +29,9 @@ data class Track(
     @ColumnInfo(defaultValue = "0") val isAudiobook: Boolean = false,
     @ColumnInfo(defaultValue = "0") val albumId: Long = 0,
     @ColumnInfo(defaultValue = "''") val albumArtist: String = "",
-    @ColumnInfo(defaultValue = "0") val trackNumber: Int = 0
+    @ColumnInfo(defaultValue = "0") val trackNumber: Int = 0,
+    @ColumnInfo(defaultValue = "''") val folderPath: String = "",
+    @ColumnInfo(defaultValue = "''") val fileName: String = ""
 )
 
 @Dao interface TrackDao {
@@ -95,7 +97,7 @@ data class EqPreset(@PrimaryKey val name: String, val levels: String, val bass: 
 }
 
 @Database(entities = [Track::class, EqPreset::class, PlayEvent::class, Playlist::class, PlaylistEntry::class],
-    version = 5, exportSchema = false)
+    version = 6, exportSchema = false)
 abstract class MusicDb : RoomDatabase() {
     abstract fun tracks(): TrackDao
     abstract fun eq(): EqDao
@@ -135,6 +137,11 @@ abstract class MusicDb : RoomDatabase() {
                         db.execSQL("ALTER TABLE tracks ADD COLUMN albumArtist TEXT NOT NULL DEFAULT ''")
                         db.execSQL("ALTER TABLE tracks ADD COLUMN trackNumber INTEGER NOT NULL DEFAULT 0")
                     }
+                }, object : Migration(5, 6) {
+                    override fun migrate(db: SupportSQLiteDatabase) {
+                        db.execSQL("ALTER TABLE tracks ADD COLUMN folderPath TEXT NOT NULL DEFAULT ''")
+                        db.execSQL("ALTER TABLE tracks ADD COLUMN fileName TEXT NOT NULL DEFAULT ''")
+                    }
                 }).build().also { instance = it }
         }
     }
@@ -165,28 +172,31 @@ class LocalLibrary(private val context: Context, private val dao: TrackDao) {
                 val id = c.getLong(0)
                 ids += id
                 val old = existing[id]
-                val stamp = "v5:${c.getLong(10)}:${c.getLong(11)}"
+                val stamp = "v7:${c.getLong(10)}:${c.getLong(11)}"
                 if (!force && old != null && fingerprints.getString(id.toString(), null) == stamp) continue
                 val trackUri = ContentUris.withAppendedId(uri, id)
                 val local = tags.read(trackUri, id, c.getString(8))
                 val fileName = c.getString(7)?.substringBeforeLast('.')?.tagValue()
                 val audiobook = c.getString(7)?.endsWith(".m4b", true) == true ||
-                    c.getString(9)?.contains("audiobook", true) == true ||
+                    isAudiobookPath(c.getString(9).orEmpty()) ||
                     local.genre?.contains("audiobook", true) == true ||
-                    local.genre?.contains("spoken word", true) == true
+                    local.genre?.contains("spoken word", true) == true ||
+                    local.genre?.contains("аудиокниг", true) == true
                 val online = old?.takeIf { it.fetchedAt > 0 }
                 changed.add(Track(
                     id, trackUri.toString(),
                     local.title ?: online?.title.tagValue() ?: fileName ?: c.getString(1).tagValue() ?: "Unknown",
-                    local.artist ?: online?.artist.tagValue() ?: c.getString(2).tagValue() ?: "Unknown",
+                    (if (audiobook) local.author ?: local.albumArtist else null)
+                        ?: local.artist ?: online?.artist.tagValue() ?: c.getString(2).tagValue() ?: "Unknown",
                     local.album ?: online?.album.tagValue() ?: c.getString(3).tagValue().orEmpty(),
                     c.getLong(4), c.getString(5) ?: "",
                     local.artUri ?: old?.artUri, local.lyrics ?: old?.lyrics,
                     old?.fetchedAt ?: 0, local.genre ?: old?.genre.orEmpty(),
                     old?.addedAt?.takeIf { it > 0 } ?: c.getLong(6) * 1000,
                     local.title == null || local.artist == null || local.album == null || local.artUri == null,
-                    audiobook, c.getLong(12), local.albumArtist.orEmpty(),
-                    local.trackNumber ?: c.getInt(13)
+                    audiobook, c.getLong(12), (if (audiobook) local.author ?: local.albumArtist else local.albumArtist).orEmpty(),
+                    local.trackNumber ?: c.getInt(13),
+                    c.getString(9).orEmpty(), c.getString(7).orEmpty()
                 ))
                 edits.putString(id.toString(), stamp)
             }

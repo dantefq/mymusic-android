@@ -21,12 +21,12 @@ class Metadata(context: Context, private val dao: TrackDao) {
 
     suspend fun enrichMissing() = withContext(Dispatchers.IO) {
         dao.all().filter { track ->
-            track.needsOnline && track.fetchedAt < System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)
+            !track.isAudiobook && track.needsOnline && track.fetchedAt < System.currentTimeMillis() - TimeUnit.DAYS.toMillis(30)
         }.forEach { track -> runCatching { enrich(track) } }
     }
 
     suspend fun fetchLyrics(id: Long) = withContext(Dispatchers.IO) {
-        val track = dao.get(id)?.takeIf { it.lyrics.isNullOrBlank() } ?: return@withContext
+        val track = dao.get(id)?.takeIf { !it.isAudiobook && it.lyrics.isNullOrBlank() } ?: return@withContext
         val url = "https://lrclib.net/api/get?track_name=${Uri.encode(track.title)}" +
             "&artist_name=${Uri.encode(track.artist)}&album_name=${Uri.encode(track.album)}" +
             (if (track.durationMs > 0) "&duration=${track.durationMs / 1000}" else "")
@@ -37,6 +37,7 @@ class Metadata(context: Context, private val dao: TrackDao) {
     }
 
     suspend fun enrich(track: Track): Track = withContext(Dispatchers.IO) {
+        if (track.isAudiobook) return@withContext track
         val uri = Uri.parse(track.uri)
         val path = runCatching {
             context.contentResolver.query(uri, arrayOf(MediaStore.Audio.Media.DATA), null, null, null)

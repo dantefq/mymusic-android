@@ -2,6 +2,7 @@ package com.example.mymusic
 
 import android.content.Context
 import android.net.Uri
+import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -39,7 +40,9 @@ class PlaybackSnapshot(context: Context) {
                         .put("title", item.mediaMetadata.title?.toString().orEmpty())
                         .put("artist", item.mediaMetadata.artist?.toString().orEmpty())
                         .put("album", item.mediaMetadata.albumTitle?.toString().orEmpty())
-                        .put("art", item.mediaMetadata.artworkUri?.toString().orEmpty()))
+                        .put("art", item.mediaMetadata.artworkUri?.toString().orEmpty())
+                        .put("book", item.mediaMetadata.extras?.getString(BOOK_KEY).orEmpty())
+                        .put("lastChapter", item.mediaMetadata.extras?.getBoolean(BOOK_LAST_CHAPTER) == true))
                 }
                 val serialized = queue.toString()
                 currentCoroutineContext().ensureActive()
@@ -63,6 +66,10 @@ class PlaybackSnapshot(context: Context) {
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(saved.optString("title"))
                     .setArtist(saved.optString("artist")).setAlbumTitle(saved.optString("album"))
                     .setArtworkUri(saved.optString("art").takeIf { it.isNotBlank() }?.let(Uri::parse))
+                    .setExtras(Bundle().apply {
+                        saved.optString("book").takeIf { it.isNotBlank() }?.let { putString(BOOK_KEY, it) }
+                        putBoolean(BOOK_LAST_CHAPTER, saved.optBoolean("lastChapter"))
+                    })
                     .build()).build()
         }
         if (items.isNotEmpty()) {

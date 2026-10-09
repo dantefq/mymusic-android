@@ -104,6 +104,8 @@ class MainActivity : ComponentActivity() {
 
     private val db by lazy { MusicDb.get(this) }
     private val metadata by lazy { Metadata(this, db.tracks()) }
+    private val bookMetadata by lazy { BookMetadata(this) }
+    private val bookBookmarks by lazy { BookBookmarks(this) }
     private var controller by mutableStateOf<MediaController?>(null)
     private var activityDestroyed = false
     private var scanJob: Job? = null
@@ -193,7 +195,7 @@ class MainActivity : ComponentActivity() {
                         isAppearanceLightNavigationBars = background.luminance() > .45f
                     }
                 }
-                Screen()
+                LaunchReveal(enabled = savedInstanceState == null) { Screen() }
             }
         }
     }
@@ -210,6 +212,11 @@ class MainActivity : ComponentActivity() {
             .onSuccess {
                 message = localized("Library updated")
                 lifecycleScope.launch { metadata.enrichMissing() }
+                lifecycleScope.launch {
+                    val books = withContext(Dispatchers.IO) { groupAudiobooks(db.tracks().all()) }
+                    bookBookmarks.reconcile(books)
+                    bookMetadata.enrich(books)
+                }
                 if (allowAutoCleanup && getSharedPreferences("duplicate_cleanup", MODE_PRIVATE).getBoolean("automatic", false)) scanDuplicates(true)
             }
             .onFailure { message = it.message ?: localized("Scan failed") }
@@ -254,20 +261,47 @@ class MainActivity : ComponentActivity() {
         }.onFailure { message = it.message ?: localized("Delete failed") }
     }
 
-    private fun play(tracks: List<Track>, selected: Track, mode: String = "off") {
+    private fun play(tracks: List<Track>, selected: Track, mode: String = "off", startPosition: Long = 0,
+        audiobook: Audiobook? = null) {
         val player = controller ?: run { message = localized("Player is starting. Try again."); return }
         playJob?.cancel()
         playJob = lifecycleScope.launch {
+            val book = if (selected.isAudiobook) audiobook ?: withContext(Dispatchers.IO) {
+                groupAudiobooks(db.tracks().all()).firstOrNull { it.key == audiobookKey(selected) }
+            } else null
             val (items, index) = withContext(Dispatchers.Default) {
-                val queue = if (mode == "random") listOf(selected) + randomContinuation(tracks, selected.id) else tracks
-                queue.map(::mediaItem) to queue.indexOfFirst { it.id == selected.id }
+                val queue = book?.chapters ?: if (mode == "random") listOf(selected) + randomContinuation(tracks.filterNot { it.isAudiobook }, selected.id) else tracks
+                queue.mapIndexed { chapterIndex, track ->
+                    if (book == null) mediaItem(track) else {
+                        mediaItem(track).buildUpon().setMediaMetadata(bookMediaMetadata(book, track, chapterIndex)).build()
+                    }
+                } to queue.indexOfFirst { it.id == selected.id }
             }
             if (index < 0 || controller !== player) return@launch
-            getSharedPreferences("playback", MODE_PRIVATE).edit().putString("queue_mode", mode).apply()
-            player.setMediaItems(items, index, 0)
+            bookBookmarks.save(player)
+            getSharedPreferences("playback", MODE_PRIVATE).edit().putString("queue_mode", if (book != null) "off" else mode).apply()
+            if (book != null) {
+                player.shuffleModeEnabled = false
+                player.repeatMode = Player.REPEAT_MODE_OFF
+            }
+            player.setMediaItems(items, index, startPosition.coerceAtLeast(0))
             player.prepare()
             player.play()
         }
+    }
+
+    private fun chapterLabel(track: Track, index: Int): String {
+        val number = chapterNumbers(track)
+        return "${localized("Chapter")} ${number.chapter ?: index + 1}" +
+            (number.part?.let { " · ${localized("Part")} $it" } ?: "")
+    }
+
+    private fun bookMediaMetadata(book: Audiobook, track: Track, index: Int): MediaMetadata {
+        val details = matchingBookDetails(book, bookMetadata.details.value[book.key])
+        return MediaMetadata.Builder().setTitle("${details?.title ?: book.title} · ${chapterLabel(track, index)}")
+            .setArtist(details?.author?.ifBlank { book.author } ?: book.author).setAlbumTitle(details?.title ?: book.title)
+            .setArtworkUri(bookCoverUri(book, details, bookMetadata.artwork.value)?.let(Uri::parse))
+            .setExtras(Bundle().apply { putString(BOOK_KEY, book.key); putBoolean(BOOK_LAST_CHAPTER, index == book.chapters.lastIndex) }).build()
     }
 
     private fun mediaItem(track: Track): MediaItem = MediaItem.Builder()
@@ -281,6 +315,13 @@ class MainActivity : ComponentActivity() {
             db.tracks().observe().distinctUntilChanged().map(::indexLibrary).flowOn(Dispatchers.Default)
         }.collectAsStateWithLifecycle(LibraryIndex())
         val tracks = library.tracks
+        val cachedBookDetails by bookMetadata.details.collectAsStateWithLifecycle()
+        val bookArtwork by bookMetadata.artwork.collectAsStateWithLifecycle()
+        val books = library.books
+        val bookDetails = remember(books, cachedBookDetails) { books.mapNotNull { book ->
+            matchingBookDetails(book, cachedBookDetails[book.key])?.let { book.key to it }
+        }.toMap() }
+        var selectedBookKey by rememberSaveable { mutableStateOf<String?>(null) }
         val presets by remember { db.eq().observe() }.collectAsStateWithLifecycle(emptyList())
         val plays by remember { db.plays().observeSince(System.currentTimeMillis() - 90L * 86400000) }.collectAsStateWithLifecycle(emptyList())
         var playCounts by remember { mutableStateOf(emptyMap<Long, Int>()) }
@@ -328,11 +369,33 @@ class MainActivity : ComponentActivity() {
             delay(220)
             settledQuery = query
         }
-        val active = library.byId[mediaId?.toLongOrNull()]
+        val rawActive = library.byId[mediaId?.toLongOrNull()]
+        val activeBook = rawActive?.takeIf { it.isAudiobook }?.let { track -> books.firstOrNull { it.key == audiobookKey(track) } }
+        val active = if (activeBook != null) {
+            val details = bookDetails[activeBook.key]
+            rawActive.copy(title = "${details?.title ?: activeBook.title} · ${chapterLabel(rawActive, activeBook.chapters.indexOfFirst { it.id == rawActive.id })}",
+                artist = details?.author?.ifBlank { activeBook.author } ?: activeBook.author,
+                album = details?.title ?: activeBook.title, artUri = bookCoverUri(activeBook, details, bookArtwork))
+        } else rawActive
+        // Also repair a restored queue/notification when names or covers improve, without seeking or restarting audio.
+        LaunchedEffect(books, bookDetails, bookArtwork, player) {
+            if (player != null) for (index in 0 until player.mediaItemCount) {
+                val old = player.getMediaItemAt(index)
+                val source = library.byId[old.mediaId.toLongOrNull()]?.takeIf { it.isAudiobook } ?: continue
+                val book = books.firstOrNull { it.key == audiobookKey(source) } ?: continue
+                val metadata = bookMediaMetadata(book, source, book.chapters.indexOfFirst { it.id == source.id })
+                if (old.mediaMetadata != metadata) player.replaceMediaItem(index, old.buildUpon().setMediaMetadata(metadata).build())
+            }
+        }
         val contentPage = navigation.contentPage
         val openAlbum: (Track) -> Unit = {
-            selectedAlbum = albumKey(it)
-            navigation.openCollection("album")
+            if (it.isAudiobook) {
+                selectedBookKey = activeBook?.key ?: audiobookKey(it)
+                navigation.page = "audiobooks"
+            } else {
+                selectedAlbum = albumKey(it)
+                navigation.openCollection("album")
+            }
         }
         val openArtist: (String) -> Unit = {
             selectedArtist = it
@@ -342,7 +405,7 @@ class MainActivity : ComponentActivity() {
         val togglePlay: () -> Unit = { player?.let { if (it.isPlaying) it.pause() else it.play() }; Unit }
         val playNormal: (List<Track>, Track) -> Unit = { list, track ->
             if (settledQuery.isNotBlank()) {
-                play(tracks, track, "random")
+                play(library.music, track, "random")
             } else play(list, track)
         }
         BackHandler(page != "library") {
@@ -408,7 +471,11 @@ class MainActivity : ComponentActivity() {
                         val group = duplicateGroups.orEmpty().firstOrNull { track in it.tracks }
                         group?.tracks?.firstOrNull()?.let { keep -> requestDuplicateDelete(listOf(DuplicateReplacement(track, keep))) }
                     }, modifier = Modifier.padding(inner))
-                "audiobooks" -> AudiobooksScreen(tracks, { list, track -> play(list, track) },
+                "audiobooks" -> AudiobooksScreen(books, bookDetails, bookArtwork, bookBookmarks,
+                    selectedBookKey, { selectedBookKey = it }, inputEnabled = page != "player",
+                    playingId = if (playing && page != "player") activeBook?.let { rawActive?.id } else null,
+                    onPlay = { book, track, position -> play(book.chapters, track, startPosition = position, audiobook = book) },
+                    onRefresh = { bookMetadata.enrich(books, force = true) },
                     modifier = Modifier.padding(inner))
                 "playlists" -> PlaylistsScreen(db, tracks, playNormal, modifier = Modifier.padding(inner))
                 "stats" -> StatsScreen(tracks, plays, onBack = { navigation.page = "settings" },
@@ -424,6 +491,7 @@ class MainActivity : ComponentActivity() {
                     onAlbum = { selectedAlbum = it; navigation.page = "album" },
                     modifier = Modifier.padding(inner))
                 else -> LibraryPage(library.music, library.music.size, query, settledQuery, { query = it },
+                    musicPlaying = playing && active?.isAudiobook == false && page != "player",
                     onArtist = { openArtist(it); query = "" },
                     onAlbumTrack = openAlbum,
                     onSmartPlay = {
@@ -444,10 +512,10 @@ class MainActivity : ComponentActivity() {
         AnimatedVisibility(visible = navigation.page == "player", modifier = Modifier.fillMaxSize(),
             enter = slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it },
             exit = slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it }) {
-            PlayerPage(active, playing, clock,
+            PlayerPage(active, playing, clock, activeBook,
                 shuffled = shuffled, repeatMode = repeatMode,
-                onShuffle = { player?.shuffleModeEnabled = !shuffled },
-                onRepeat = { player?.repeatMode = (repeatMode + 1) % 3 },
+                onShuffle = { if (active?.isAudiobook != true) player?.shuffleModeEnabled = !shuffled },
+                onRepeat = { if (active?.isAudiobook != true) player?.repeatMode = (repeatMode + 1) % 3 },
                 onOutput = { outputOpen = true },
                 onAlbumTrack = { active?.let(openAlbum) }, onArtist = openArtist,
                 onBack = navigation::closePlayer, onPlay = togglePlay,
@@ -490,7 +558,7 @@ class MainActivity : ComponentActivity() {
         onSmartPlay: () -> Unit, onScan: () -> Unit, onOutput: () -> Unit,
         onAlbumTrack: (Track) -> Unit, onArtist: (String) -> Unit,
         onSettings: () -> Unit, onShuffle: (List<Track>) -> Unit,
-        onTrack: (List<Track>, Track) -> Unit, activeId: String?, inputEnabled: Boolean, modifier: Modifier = Modifier
+        onTrack: (List<Track>, Track) -> Unit, activeId: String?, inputEnabled: Boolean, musicPlaying: Boolean, modifier: Modifier = Modifier
     ) {
         var searchOpen by remember { mutableStateOf(false) }
         var toolsOpen by remember { mutableStateOf(false) }
@@ -566,6 +634,8 @@ class MainActivity : ComponentActivity() {
                     if (tracks.isEmpty()) item("search_empty") { Text(l("No matching songs"), color = muted, modifier = Modifier.padding(vertical = 20.dp)) }
                 } else {
                     item("smart") {
+                        MusicAtmosphere(total, musicPlaying)
+                        Spacer(Modifier.height(18.dp))
                         SmartMixButton(onSmartPlay, enabled = total > 0)
                         ConceptDivider(Modifier.padding(top = 16.dp))
                     }
@@ -845,7 +915,7 @@ class MainActivity : ComponentActivity() {
                 IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.SkipNext, l("Next"), tint = white)
                 }
-                IconButton(onClick = onOutput, modifier = Modifier.size(48.dp)) {
+                if (!track.isAudiobook) IconButton(onClick = onOutput, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.SpeakerGroup, l("Output device"), tint = white, modifier = Modifier.size(21.dp))
                 }
             }
@@ -854,7 +924,7 @@ class MainActivity : ComponentActivity() {
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
-    @Composable private fun PlayerPage(track: Track?, playing: Boolean, clock: PlaybackClock,
+    @Composable private fun PlayerPage(track: Track?, playing: Boolean, clock: PlaybackClock, book: Audiobook?,
         shuffled: Boolean, repeatMode: Int, onShuffle: () -> Unit, onRepeat: () -> Unit,
         onOutput: () -> Unit, onAlbumTrack: () -> Unit, onArtist: (String) -> Unit,
         onBack: () -> Unit, onPlay: () -> Unit, onPrevious: () -> Unit,
@@ -863,6 +933,9 @@ class MainActivity : ComponentActivity() {
         val view = LocalView.current
         var showLyrics by remember(track?.id) { mutableStateOf(false) }
         val context = LocalContext.current
+        var showSleepTimer by remember { mutableStateOf(false) }
+        val sleepState = rememberSleepTimer()
+        if (showSleepTimer) SleepTimerSheet(track?.id ?: 0, book?.key.orEmpty(), onDismiss = { showSleepTimer = false })
         val favorites = remember { context.getSharedPreferences("favorites", MODE_PRIVATE) }
         var favorite by remember(track?.id) { mutableStateOf(track?.id?.toString() in favorites.getStringSet("tracks", emptySet()).orEmpty()) }
         if (showLyrics) ModalBottomSheet(onDismissRequest = { showLyrics = false }, containerColor = panel) {
@@ -900,14 +973,16 @@ class MainActivity : ComponentActivity() {
                 Row(Modifier.fillMaxWidth().height(56.dp).padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = onBack) { Icon(Icons.Default.KeyboardArrowDown, l("Back to library"), tint = white) }
                     Spacer(Modifier.weight(1f))
-                    IconButton(onClick = onOutput) { Icon(Icons.Default.Cast, l("Output device"), tint = white, modifier = Modifier.size(22.dp)) }
+                    if (track?.isAudiobook == true) IconButton(onClick = { showSleepTimer = true }) {
+                        Icon(Icons.Default.Bedtime, l("Sleep timer"), tint = if (sleepState.active) bookAccent else white, modifier = Modifier.size(22.dp))
+                    } else IconButton(onClick = onOutput) { Icon(Icons.Default.Cast, l("Output device"), tint = white, modifier = Modifier.size(22.dp)) }
                     IconButton(onClick = onEqualizer) { Icon(Icons.Default.Equalizer, l("Equalizer"), tint = white) }
                 }
                 Box(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 16.dp), contentAlignment = Alignment.Center) {
                     AnimatedContent(targetState = track, contentKey = { it?.id to it?.artUri }, label = "album art", transitionSpec = {
                         (fadeIn(tween(240)) togetherWith fadeOut(tween(180))).using(SizeTransform(sizeAnimationSpec = { _, _ -> tween(0) }))
                     }) { current ->
-                        Artwork(current, Modifier.size(artSize).pointerInput(current?.id, onNext, onPrevious) {
+                        Artwork(current, (if (book != null) Modifier.width(artSize * .714f).height(artSize).then(bookPlaybackMotion(playing)) else Modifier.size(artSize)).pointerInput(current?.id, onNext, onPrevious) {
                             var dx = 0f
                             detectHorizontalDragGestures(onHorizontalDrag = { change, amount -> change.consume(); dx += amount }, onDragEnd = {
                                 if (kotlin.math.abs(dx) > 85f) { view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK); if (dx < 0) onNext() else onPrevious() }; dx = 0f
@@ -917,8 +992,8 @@ class MainActivity : ComponentActivity() {
                 }
                 Column(Modifier.padding(horizontal = 20.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(track?.title ?: l("Nothing playing"), color = white, fontSize = 32.sp, lineHeight = 36.sp, fontFamily = headingFont,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).clickable(onClick = onAlbumTrack))
+                        Text(if (book != null) track?.album.orEmpty() else track?.title ?: l("Nothing playing"), color = white, fontSize = if (book != null) 27.sp else 32.sp, lineHeight = 32.sp, fontFamily = headingFont,
+                            maxLines = if (book != null) 2 else 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).clickable(onClick = onAlbumTrack))
                         IconButton(onClick = {
                             val id = track?.id?.toString() ?: return@IconButton
                             favorite = !favorite
@@ -927,25 +1002,33 @@ class MainActivity : ComponentActivity() {
                             favorites.edit().putStringSet("tracks", ids).apply()
                         }, enabled = track != null) { Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, l("Favorite"), tint = if (favorite) accent else white) }
                     }
-                    if (track != null) ArtistLinks(track, onArtist, size = 16)
+                    if (book != null) Text(track?.artist?.ifBlank { l("Unknown author") }.orEmpty(), color = bookAccent, fontSize = 16.sp)
+                    else if (track != null) ArtistLinks(track, onArtist, size = 16)
                     else Text(l("Choose a song from your library"), color = muted)
-                    if (track != null) Text(track.album.ifBlank { l("Unknown album") },
+                    if (track != null) Text(if (book != null) chapterLabel(track, book.chapters.indexOfFirst { it.id == track.id }) else track.album.ifBlank { l("Unknown album") },
                         color = muted, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.fillMaxWidth().clickable(onClick = onAlbumTrack).padding(vertical = 5.dp))
-                    GlassSeekBar(clock, track?.id ?: 0, track != null, onSeek)
+                    GlassSeekBar(clock, track?.id ?: 0, track != null, onSeek, if (book != null) bookAccent else accent)
                     Row(Modifier.fillMaxWidth().height(92.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = onShuffle) { Icon(Icons.Default.Shuffle, l("Shuffle"), tint = if (shuffled) accent else white, modifier = Modifier.size(23.dp)) }
+                        if (book != null) IconButton(onClick = { onSeek((clock.position - 30000).coerceAtLeast(0)) }) {
+                            Icon(Icons.Default.Replay30, l("Back 30 seconds"), tint = bookAccent, modifier = Modifier.size(26.dp))
+                        } else IconButton(onClick = onShuffle) { Icon(Icons.Default.Shuffle, l("Shuffle"), tint = if (shuffled) accent else white, modifier = Modifier.size(23.dp)) }
                         IconButton(onClick = onPrevious) { Icon(Icons.Default.SkipPrevious, l("Previous"), tint = white, modifier = Modifier.size(32.dp)) }
                         FilledIconButton(onClick = onPlay, modifier = Modifier.size(76.dp), enabled = track != null,
-                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = accent, contentColor = MaterialTheme.colorScheme.onPrimary)) {
-                            PlayPauseGlyph(playing, MaterialTheme.colorScheme.onPrimary, Modifier.size(33.dp))
+                            colors = IconButtonDefaults.filledIconButtonColors(containerColor = if (book != null) bookAccent else accent,
+                                contentColor = if (book != null) Color(0xFF241B13) else MaterialTheme.colorScheme.onPrimary)) {
+                            PlayPauseGlyph(playing, if (book != null) Color(0xFF241B13) else MaterialTheme.colorScheme.onPrimary, Modifier.size(33.dp))
                         }
                         IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, l("Next"), tint = white, modifier = Modifier.size(32.dp)) }
-                        IconButton(onClick = onRepeat) { Icon(if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
+                        if (book != null) IconButton(onClick = { onSeek((clock.position + 30000).coerceAtMost(clock.duration.coerceAtLeast(0))) }) {
+                            Icon(Icons.Default.Forward30, l("Forward 30 seconds"), tint = bookAccent, modifier = Modifier.size(26.dp))
+                        } else IconButton(onClick = onRepeat) { Icon(if (repeatMode == Player.REPEAT_MODE_ONE) Icons.Default.RepeatOne else Icons.Default.Repeat,
                             l("Repeat"), tint = if (repeatMode != Player.REPEAT_MODE_OFF) accent else white, modifier = Modifier.size(23.dp)) }
                     }
                 }
-                Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp).clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(panel)) {
+                if (book != null) BookListeningPanel(book, track, clock, bookBookmarks,
+                    sleepState, { showSleepTimer = true }, onAlbumTrack, Modifier.weight(1f).fillMaxWidth())
+                else Column(Modifier.weight(1f).fillMaxWidth().padding(horizontal = 8.dp).clip(RoundedCornerShape(topStart = 22.dp, topEnd = 22.dp)).background(panel)) {
                     Box(Modifier.fillMaxWidth().height(18.dp).clickable { showLyrics = true }, contentAlignment = Alignment.Center) {
                         Box(Modifier.width(34.dp).height(4.dp).clip(RoundedCornerShape(50)).background(muted.copy(alpha = .6f)))
                     }
@@ -1062,7 +1145,7 @@ class MainActivity : ComponentActivity() {
                     Slider(timerMinutes, { timerMinutes = it }, valueRange = 0f..120f, steps = 11)
                     Button(onClick = {
                         val end = if (timerMinutes > 0f) System.currentTimeMillis() + timerMinutes.toLong() * 60_000 else 0L
-                        playbackPrefs.edit().putLong("sleep_until", end).apply()
+                        playbackPrefs.edit().putLong("sleep_until", end).remove("sleep_chapter").remove("sleep_book").apply()
                         message = if (end == 0L) localized("Sleep timer off") else localized("Sleep timer set")
                     }, modifier = Modifier.fillMaxWidth()) { Text(l("Set sleep timer")) }
                     Spacer(Modifier.height(20.dp))

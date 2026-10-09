@@ -146,6 +146,13 @@ class DevicePlaybackTest {
         fun text(value: String) = nodes().filter { it.isVisibleToUser && it.text?.toString() == value }
         fun description(value: String) = nodes().any { it.isVisibleToUser && it.contentDescription?.toString() == value }
         fun tap(node: AccessibilityNodeInfo, horizontalFraction: Float = .5f) {
+            if (horizontalFraction == .5f) {
+                var target: AccessibilityNodeInfo? = node
+                while (target != null) {
+                    if (target.isClickable && target.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return
+                    target = target.parent
+                }
+            }
             val bounds = Rect().also(node::getBoundsInScreen)
             val down = SystemClock.uptimeMillis()
             val x = bounds.left + bounds.width() * horizontalFraction
@@ -186,13 +193,16 @@ class DevicePlaybackTest {
         waitFor("Full-screen artist link must open the artist") { text("QA Artist A").isNotEmpty() && description(context.localized("Back")) }
         back()
         waitFor("Artist Back must return to full-screen playback") { description(context.localized("Back to library")) }
-        Thread.sleep(400)
+        Thread.sleep(700)
+        waitFor("Artist transition must finish before selecting the player album") { text("QA Album").size == 1 }
         tap(text("QA Album").single())
         waitFor("Full-screen album link must open the album") { text("QA Album").isNotEmpty() && description(context.localized("Back")) }
         back()
         waitFor("Album Back must return to full-screen playback") { description(context.localized("Back to library")) }
-        Thread.sleep(400)
-        val seek = nodes().first { it.rangeInfo?.max?.let { max -> max > 20_000 } == true }
+        waitFor("Full player seek rail must be ready after the album transition") {
+            nodes().any { it.isVisibleToUser && it.rangeInfo?.max?.let { max -> max > 20_000 } == true }
+        }
+        val seek = nodes().first { it.isVisibleToUser && it.rangeInfo?.max?.let { max -> max > 20_000 } == true }
         assertTrue("Seek rail must support accessible seeking", seek.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_SET_PROGRESS.id,
             Bundle().apply { putFloat(AccessibilityNodeInfo.ACTION_ARGUMENT_PROGRESS_VALUE, 5500f) }))
         waitFor("Paused seeking must update both player and clock") {

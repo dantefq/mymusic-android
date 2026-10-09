@@ -8,7 +8,8 @@ data class LibraryIndex(
     val music: List<Track> = emptyList(),
     val byId: Map<Long, Track> = emptyMap(),
     val albums: Map<String, List<Track>> = emptyMap(),
-    val artists: Map<String, List<Track>> = emptyMap()
+    val artists: Map<String, List<Track>> = emptyMap(),
+    val books: List<Audiobook> = emptyList()
 ) {
     fun artist(name: String): List<Track> = artists[name.lowercase(Locale.ROOT)].orEmpty()
 }
@@ -21,7 +22,8 @@ fun indexLibrary(tracks: List<Track>): LibraryIndex = LibraryIndex(
         songs.sortedWith(compareBy<Track> { if (it.trackNumber > 0) it.trackNumber else Int.MAX_VALUE }
             .thenBy { it.title.lowercase(Locale.ROOT) })
     },
-    artists = artistsForLibrary(tracks).mapKeys { it.key.lowercase(Locale.ROOT) }
+    artists = artistsForLibrary(tracks).mapKeys { it.key.lowercase(Locale.ROOT) },
+    books = groupAudiobooks(tracks)
 )
 
 data class LibraryArtist(val name: String, val songs: List<Track>, val albumCount: Int)
