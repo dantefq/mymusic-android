@@ -13,6 +13,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.delay
 import kotlin.math.PI
 import kotlin.math.sin
 
@@ -28,12 +29,17 @@ import kotlin.math.sin
         if (!playing || !animationsEnabled) return@LaunchedEffect
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
             var previous = 0L
-            while (true) withFrameNanos { frame ->
-                if (previous == 0L) previous = frame
-                val elapsed = frame - previous
-                if (elapsed >= 33_000_000L) {
-                    phase.floatValue = (phase.floatValue + elapsed.coerceAtMost(100_000_000L) / (periodMs * 1_000_000f)) % 1f
-                    previous = frame
+            while (true) {
+                // Sleep between frames instead of registering a callback at every refresh
+                // of a 90/120 Hz display. Layer transforms still land on a vsync boundary.
+                delay(28)
+                withFrameNanos { frame ->
+                    if (previous == 0L) previous = frame
+                    val elapsed = frame - previous
+                    if (elapsed >= 33_000_000L) {
+                        phase.floatValue = (phase.floatValue + elapsed.coerceAtMost(100_000_000L) / (periodMs * 1_000_000f)) % 1f
+                        previous = frame
+                    }
                 }
             }
         }

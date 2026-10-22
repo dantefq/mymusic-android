@@ -34,44 +34,6 @@ import kotlin.math.roundToLong
 import kotlin.math.roundToInt
 import kotlin.math.sin
 
-@Composable internal fun SmartMixButton(onClick: () -> Unit, enabled: Boolean) {
-    val shape = RoundedCornerShape(18.dp)
-    val color = accent
-    val foreground = white
-    val interaction = remember { MutableInteractionSource() }
-    val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) .98f else 1f, tween(140), label = "mixPress")
-    Row(Modifier.fillMaxWidth().heightIn(min = 84.dp)
-        .graphicsLayer { scaleX = scale; scaleY = scale; alpha = if (enabled) 1f else .45f }
-        .clip(shape)
-        .background(Brush.linearGradient(listOf(androidx.compose.ui.graphics.lerp(panel, color, .09f), panel)))
-        .border(.5.dp, foreground.copy(alpha = .13f), shape)
-        .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(),
-            enabled = enabled, role = Role.Button, onClick = onClick)
-        .padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-        Canvas(Modifier.size(48.dp)) {
-            // Static record motif: no continuously running animation in the library.
-            drawCircle(color.copy(alpha = .12f))
-            for (fraction in listOf(.43f, .34f, .25f)) {
-                drawCircle(color.copy(alpha = .65f), radius = size.minDimension * fraction, style = Stroke(1.dp.toPx()))
-            }
-            drawCircle(foreground, radius = 3.dp.toPx())
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(l("Smart Mix"), color = foreground, fontFamily = headingFont, fontSize = 23.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(3.dp))
-            Text(l("Made for you"), color = muted, fontSize = 12.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        Spacer(Modifier.width(12.dp))
-        Box(Modifier.size(44.dp).clip(CircleShape).background(color), contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(26.dp))
-        }
-    }
-}
-
 @Composable internal fun MiniProgressRail(clock: PlaybackClock) {
     val color = accent
     val trackColor = white.copy(alpha = .08f)

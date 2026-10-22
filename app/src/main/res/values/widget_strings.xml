@@ -1,0 +1,7 @@
+<resources>
+    <string name="widget_choose_music">Choose music in the app</string>
+    <string name="widget_local_audio">Local audio</string>
+    <string name="widget_open_hint">Tap to open MyMusic</string>
+    <string name="widget_music">MUSIC</string>
+    <string name="widget_audiobook">AUDIOBOOK</string>
+</resources>

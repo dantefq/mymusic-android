@@ -55,8 +55,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -98,6 +102,14 @@ import kotlinx.coroutines.withContext
 import kotlin.math.roundToLong
 
 class MainActivity : ComponentActivity() {
+    private var widgetPlayerRequested by mutableStateOf(false)
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        if (intent.getBooleanExtra(PlayerWidget.OPEN_PLAYER, false)) widgetPlayerRequested = true
+        intent.removeExtra(PlayerWidget.OPEN_PLAYER)
+    }
     override fun attachBaseContext(newBase: Context) {
         super.attachBaseContext(AppLanguage.wrap(newBase))
     }
@@ -174,6 +186,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        widgetPlayerRequested = intent.getBooleanExtra(PlayerWidget.OPEN_PLAYER, false)
+        intent.removeExtra(PlayerWidget.OPEN_PLAYER)
+        val animateIntro = savedInstanceState == null && !widgetPlayerRequested
         lifecycleScope.launch(Dispatchers.IO) { deleteSharedPreferences("spotify_secure") }
         window.statusBarColor = android.graphics.Color.rgb(12, 16, 24)
         window.navigationBarColor = android.graphics.Color.rgb(12, 16, 24)
@@ -195,7 +210,7 @@ class MainActivity : ComponentActivity() {
                         isAppearanceLightNavigationBars = background.luminance() > .45f
                     }
                 }
-                LaunchReveal(enabled = savedInstanceState == null) { Screen() }
+                LaunchReveal(enabled = animateIntro) { Screen() }
             }
         }
     }
@@ -280,7 +295,7 @@ class MainActivity : ComponentActivity() {
             if (index < 0 || controller !== player) return@launch
             bookBookmarks.save(player)
             getSharedPreferences("playback", MODE_PRIVATE).edit().putString("queue_mode", if (book != null) "off" else mode).apply()
-            if (book != null) {
+            if (book != null || mode == "smart") {
                 player.shuffleModeEnabled = false
                 player.repeatMode = Player.REPEAT_MODE_OFF
             }
@@ -318,6 +333,11 @@ class MainActivity : ComponentActivity() {
         val cachedBookDetails by bookMetadata.details.collectAsStateWithLifecycle()
         val bookArtwork by bookMetadata.artwork.collectAsStateWithLifecycle()
         val books = library.books
+        val bookChapters = remember(books) {
+            buildMap { books.forEach { book -> book.chapters.forEachIndexed { index, chapter ->
+                put(chapter.id, book to index)
+            } } }
+        }
         val bookDetails = remember(books, cachedBookDetails) { books.mapNotNull { book ->
             matchingBookDetails(book, cachedBookDetails[book.key])?.let { book.key to it }
         }.toMap() }
@@ -329,18 +349,33 @@ class MainActivity : ComponentActivity() {
             playCounts = withContext(Dispatchers.Default) { plays.groupingBy { it.trackId }.eachCount() }
         }
         val player = controller
-        val clock = rememberPlaybackClock(player)
         var mediaId by remember { mutableStateOf<String?>(null) }
         var playing by remember { mutableStateOf(false) }
+        var playRequested by remember { mutableStateOf(false) }
         var shuffled by remember { mutableStateOf(false) }
         var repeatMode by remember { mutableIntStateOf(Player.REPEAT_MODE_OFF) }
         val navigation = rememberSaveable(saver = PlayerNavigation.Saver) { PlayerNavigation() }
+        var homeRequest by rememberSaveable { mutableIntStateOf(0) }
+        var statsReturnPage by rememberSaveable { mutableStateOf("library") }
+        val favoriteIds = rememberFavoriteTracks()
+        val likedCount = remember(library.music, favoriteIds) { library.music.count { it.id in favoriteIds } }
+        var mixBusy by remember { mutableStateOf(false) }
+        var mixGeneration by remember { mutableIntStateOf(0) }
         val page = navigation.page
+        // The collapsed player's two-pixel rail needs no lyric/seek-bar frequency.
+        val clock = rememberPlaybackClock(player, if (page == "player") 100L else 500L)
         var equalizerReturnPage by rememberSaveable { mutableStateOf("library") }
         var query by remember { mutableStateOf("") }
         var settledQuery by remember { mutableStateOf("") }
         var autoDelete by remember { mutableStateOf(getSharedPreferences("duplicate_cleanup", MODE_PRIVATE).getBoolean("automatic", false)) }
         var outputOpen by remember { mutableStateOf(false) }
+        val goHome: () -> Unit = {
+            navigation.home(); homeRequest++; query = ""; settledQuery = ""
+            selectedBookKey = null; outputOpen = false
+        }
+        val goDestination: (String) -> Unit = { destination ->
+            if (destination == "library") goHome() else navigation.page = destination
+        }
 
         var selectedAlbum by rememberSaveable { mutableStateOf("") }
         var selectedArtist by rememberSaveable { mutableStateOf("") }
@@ -348,16 +383,28 @@ class MainActivity : ComponentActivity() {
 
         DisposableEffect(player) {
             val listener = object : Player.Listener {
+                override fun onMediaItemTransition(item: MediaItem?, reason: Int) {
+                    // Use the transition payload, rather than sampling an older masked
+                    // controller state while queued transport events are being dispatched.
+                    mediaId = item?.mediaId
+                }
+                override fun onPlayWhenReadyChanged(requested: Boolean, reason: Int) {
+                    playRequested = requested && player?.playbackState != Player.STATE_ENDED
+                }
+                override fun onPlaybackStateChanged(state: Int) {
+                    playRequested = state != Player.STATE_ENDED && player?.playWhenReady == true
+                }
+                override fun onIsPlayingChanged(isPlaying: Boolean) { playing = isPlaying }
+                override fun onShuffleModeEnabledChanged(enabled: Boolean) { shuffled = enabled }
+                override fun onRepeatModeChanged(mode: Int) { repeatMode = mode }
                 override fun onEvents(p: Player, events: Player.Events) {
-                    mediaId = p.currentMediaItem?.mediaId
-                    playing = p.isPlaying
-                    shuffled = p.shuffleModeEnabled
-                    repeatMode = p.repeatMode
+                    if (p.mediaItemCount == 0) mediaId = null
                 }
             }
             player?.addListener(listener)
             mediaId = player?.currentMediaItem?.mediaId
             playing = player?.isPlaying == true
+            playRequested = player?.let { widgetRequestsPause(it.playWhenReady, it.playbackState, it.mediaItemCount > 0) } == true
             shuffled = player?.shuffleModeEnabled == true
             repeatMode = player?.repeatMode ?: Player.REPEAT_MODE_OFF
             onDispose { player?.removeListener(listener) }
@@ -370,21 +417,37 @@ class MainActivity : ComponentActivity() {
             settledQuery = query
         }
         val rawActive = library.byId[mediaId?.toLongOrNull()]
-        val activeBook = rawActive?.takeIf { it.isAudiobook }?.let { track -> books.firstOrNull { it.key == audiobookKey(track) } }
+        LaunchedEffect(widgetPlayerRequested, rawActive?.id, player) {
+            if (widgetPlayerRequested && rawActive != null && player != null) {
+                navigation.openPlayer()
+                widgetPlayerRequested = false
+            } else if (widgetPlayerRequested && player != null && player.mediaItemCount == 0) {
+                widgetPlayerRequested = false
+            }
+        }
+        val activeBook = rawActive?.takeIf { it.isAudiobook }?.let { bookChapters[it.id]?.first }
         val active = if (activeBook != null) {
             val details = bookDetails[activeBook.key]
-            rawActive.copy(title = "${details?.title ?: activeBook.title} · ${chapterLabel(rawActive, activeBook.chapters.indexOfFirst { it.id == rawActive.id })}",
+            rawActive.copy(title = "${details?.title ?: activeBook.title} · ${chapterLabel(rawActive, bookChapters[rawActive.id]?.second ?: 0)}",
                 artist = details?.author?.ifBlank { activeBook.author } ?: activeBook.author,
                 album = details?.title ?: activeBook.title, artUri = bookCoverUri(activeBook, details, bookArtwork))
         } else rawActive
         // Also repair a restored queue/notification when names or covers improve, without seeking or restarting audio.
         LaunchedEffect(books, bookDetails, bookArtwork, player) {
-            if (player != null) for (index in 0 until player.mediaItemCount) {
-                val old = player.getMediaItemAt(index)
-                val source = library.byId[old.mediaId.toLongOrNull()]?.takeIf { it.isAudiobook } ?: continue
-                val book = books.firstOrNull { it.key == audiobookKey(source) } ?: continue
-                val metadata = bookMediaMetadata(book, source, book.chapters.indexOfFirst { it.id == source.id })
-                if (old.mediaMetadata != metadata) player.replaceMediaItem(index, old.buildUpon().setMediaMetadata(metadata).build())
+            if (player != null) {
+                for (index in 0 until player.mediaItemCount) {
+                    val old = player.getMediaItemAt(index)
+                    val chapter = bookChapters[old.mediaId.toLongOrNull()]
+                    if (chapter != null) {
+                        val (book, chapterIndex) = chapter
+                        val metadata = bookMediaMetadata(book, book.chapters[chapterIndex], chapterIndex)
+                        if (old.mediaMetadata != metadata) {
+                            // Keep the existing item/configuration; persistence coalesces
+                            // this burst without rebuilding the playback queue.
+                            player.replaceMediaItem(index, old.buildUpon().setMediaMetadata(metadata).build())
+                        }
+                    }
+                }
             }
         }
         val contentPage = navigation.contentPage
@@ -402,47 +465,42 @@ class MainActivity : ComponentActivity() {
             navigation.openCollection("artist")
         }
         val collectionBack: () -> Unit = navigation::closeCollection
-        val togglePlay: () -> Unit = { player?.let { if (it.isPlaying) it.pause() else it.play() }; Unit }
+        val togglePlay: () -> Unit = {
+            player?.let {
+                if (widgetRequestsPause(it.playWhenReady, it.playbackState, it.mediaItemCount > 0)) it.pause()
+                else if (it.mediaItemCount > 0) {
+                    if (it.playbackState == Player.STATE_ENDED) it.seekToDefaultPosition()
+                    if (it.playbackState == Player.STATE_IDLE) it.prepare()
+                    it.play()
+                }
+            }; Unit
+        }
         val playNormal: (List<Track>, Track) -> Unit = { list, track ->
             if (settledQuery.isNotBlank()) {
                 play(library.music, track, "random")
             } else play(list, track)
         }
         BackHandler(page != "library") {
-            navigation.back(equalizerReturnPage)
+            if (page == "stats") navigation.page = statsReturnPage else navigation.back(equalizerReturnPage)
         }
 
         Box(Modifier.fillMaxSize()) {
-        Scaffold(modifier = if (page == "player") Modifier.clearAndSetSemantics {} else Modifier,
+        Scaffold(modifier = Modifier.drawWithContent { if (page != "player") drawContent() }
+            .then(if (page == "player") Modifier.clearAndSetSemantics {} else Modifier),
             containerColor = ink, snackbarHost = {
             SnackbarHost(snackbar) { data -> Snackbar(data, containerColor = raised, contentColor = white) }
         },
             bottomBar = {
-                if (contentPage in listOf("library", "audiobooks", "playlists", "album", "artist")) {
                     Column {
-                        if (active != null) MiniPlayer(active, playing, clock,
+                        if (active != null) MiniPlayer(active, playRequested, clock,
                             onOpen = navigation::openPlayer, onPlay = togglePlay,
                             onQueue = { navigation.page = "queue" },
                             onOutput = { outputOpen = true },
                             onPrevious = { player?.seekToPreviousMediaItem() },
                             onNext = { player?.seekToNextMediaItem() })
                         ConceptDivider()
-                        Row(Modifier.fillMaxWidth().navigationBarsPadding().height(64.dp), verticalAlignment = Alignment.CenterVertically) {
-                            listOf(
-                                Triple("library", Icons.Default.MusicNote, l("Library")),
-                                Triple("playlists", Icons.Default.QueueMusic, l("Playlists")),
-                                Triple("audiobooks", Icons.Default.Headphones, l("Audiobooks"))
-                            ).forEach { (destination, icon, label) ->
-                                Column(Modifier.weight(1f).fillMaxHeight().clickable { navigation.page = destination },
-                                    horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-                                    Icon(icon, label, tint = if (contentPage == destination) accent else muted, modifier = Modifier.size(25.dp))
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(label, color = if (contentPage == destination) accent else muted, fontSize = 11.sp)
-                                }
-                            }
-                        }
+                        RootNavigationBar(contentPage, goDestination)
                     }
-                }
             }) { inner ->
             AnimatedContent(targetState = contentPage, label = "screen", transitionSpec = {
                 (fadeIn(tween(220, easing = FastOutSlowInEasing)) togetherWith fadeOut(tween(160)))
@@ -459,7 +517,7 @@ class MainActivity : ComponentActivity() {
                 }
                 "settings" -> SettingsPage(onBack = { navigation.page = "library" }, onAppearance = { navigation.page = "appearance" },
 
-                    onDuplicates = { navigation.page = "duplicates" }, onStats = { navigation.page = "stats" },
+                    onDuplicates = { navigation.page = "duplicates" }, onStats = { statsReturnPage = "settings"; navigation.page = "stats" },
                     modifier = Modifier.padding(inner))
                 "duplicates" -> DuplicatesScreen(duplicateGroups, onScan = { scanDuplicates() },
                     onCleanAll = { scanDuplicates(true) }, autoDelete = autoDelete, scanning = duplicateScanning,
@@ -478,7 +536,9 @@ class MainActivity : ComponentActivity() {
                     onRefresh = { bookMetadata.enrich(books, force = true) },
                     modifier = Modifier.padding(inner))
                 "playlists" -> PlaylistsScreen(db, tracks, playNormal, modifier = Modifier.padding(inner))
-                "stats" -> StatsScreen(tracks, plays, onBack = { navigation.page = "settings" },
+                "liked" -> LikedTracksScreen(library.music, favoriteIds, playNormal,
+                    onUnlike = { toggleFavoriteTrack(this@MainActivity, it) }, onHome = goHome, modifier = Modifier.padding(inner))
+                "stats" -> StatsScreen(library.music, plays, onBack = { navigation.page = statsReturnPage }, onPlay = playNormal,
                     modifier = Modifier.padding(inner))
                 "queue" -> QueueScreen(player, onBack = { navigation.page = "library" }, modifier = Modifier.padding(inner))
                 "album" -> AlbumPage(library.albums[selectedAlbum].orEmpty(),
@@ -491,13 +551,23 @@ class MainActivity : ComponentActivity() {
                     onAlbum = { selectedAlbum = it; navigation.page = "album" },
                     modifier = Modifier.padding(inner))
                 else -> LibraryPage(library.music, library.music.size, query, settledQuery, { query = it },
+                    homeRequest = homeRequest, likedCount = likedCount, mixBusy = mixBusy, mixGeneration = mixGeneration,
+                    onLiked = { navigation.page = "liked" }, onStats = { statsReturnPage = "library"; navigation.page = "stats" },
                     musicPlaying = playing && active?.isAudiobook == false && page != "player",
                     onArtist = { openArtist(it); query = "" },
                     onAlbumTrack = openAlbum,
                     onSmartPlay = {
-                        lifecycleScope.launch {
-                            val mix = withContext(Dispatchers.Default) { myWaveMix(tracks.filterNot { it.isAudiobook }, plays, kotlin.random.Random.nextInt()).take(20) }
-                            if (mix.isNotEmpty()) play(mix, mix.first(), "smart")
+                        if (!mixBusy && controller != null) {
+                            mixBusy = true
+                            lifecycleScope.launch {
+                                try {
+                                    val blocked = mediaId?.toLongOrNull()?.takeIf { library.music.size > 1 }?.let(::setOf).orEmpty()
+                                    val mix = SmartMixStore(this@MainActivity).next(library.music, plays, favoriteIds, blocked)
+                                    if (mix.isNotEmpty()) { play(mix, mix.first(), "smart"); playJob?.join(); mixGeneration++ }
+                                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
+                                catch (_: Exception) { message = localized("Could not create a mix. Try again.") }
+                                finally { mixBusy = false }
+                            }
                         }
                     },
                     onScan = { requestOrScan(true) },
@@ -512,7 +582,8 @@ class MainActivity : ComponentActivity() {
         AnimatedVisibility(visible = navigation.page == "player", modifier = Modifier.fillMaxSize(),
             enter = slideInVertically(tween(320, easing = FastOutSlowInEasing)) { it },
             exit = slideOutVertically(tween(280, easing = FastOutSlowInEasing)) { it }) {
-            PlayerPage(active, playing, clock, activeBook,
+            Column(Modifier.fillMaxSize().background(ink)) {
+            Box(Modifier.weight(1f)) { PlayerPage(active, playing, playRequested, clock, activeBook,
                 shuffled = shuffled, repeatMode = repeatMode,
                 onShuffle = { if (active?.isAudiobook != true) player?.shuffleModeEnabled = !shuffled },
                 onRepeat = { if (active?.isAudiobook != true) player?.repeatMode = (repeatMode + 1) % 3 },
@@ -521,7 +592,9 @@ class MainActivity : ComponentActivity() {
                 onBack = navigation::closePlayer, onPlay = togglePlay,
                 onPrevious = { player?.seekToPreviousMediaItem() }, onNext = { player?.seekToNextMediaItem() },
                 onSeek = { player?.seekTo(it) },
-                onEqualizer = { equalizerReturnPage = "player"; navigation.page = "equalizer" })
+                onEqualizer = { equalizerReturnPage = "player"; navigation.page = "equalizer" }) }
+            RootNavigationBar(contentPage, goDestination)
+            }
         }
         }
         if (outputOpen) {
@@ -555,6 +628,7 @@ class MainActivity : ComponentActivity() {
     @OptIn(ExperimentalFoundationApi::class)
     @Composable private fun LibraryPage(
         libraryTracks: List<Track>, total: Int, query: String, settledQuery: String, onQuery: (String) -> Unit,
+        homeRequest: Int, likedCount: Int, mixBusy: Boolean, mixGeneration: Int, onLiked: () -> Unit, onStats: () -> Unit,
         onSmartPlay: () -> Unit, onScan: () -> Unit, onOutput: () -> Unit,
         onAlbumTrack: (Track) -> Unit, onArtist: (String) -> Unit,
         onSettings: () -> Unit, onShuffle: (List<Track>) -> Unit,
@@ -566,6 +640,11 @@ class MainActivity : ComponentActivity() {
 
         var tracksExpanded by rememberSaveable { mutableStateOf(false) }
         var artistsExpanded by rememberSaveable { mutableStateOf(false) }
+        val listState = androidx.compose.foundation.lazy.rememberLazyListState()
+        LaunchedEffect(homeRequest) {
+            searchOpen = false; searchType = "All"; toolsOpen = false
+            tracksExpanded = false; artistsExpanded = false; listState.scrollToItem(0)
+        }
 
         val preferences = remember { getSharedPreferences("library_view", MODE_PRIVATE) }
         var sortField by remember { mutableStateOf(preferences.getString("sort", "Name").orEmpty()) }
@@ -612,7 +691,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(start = 20.dp, end = 20.dp, bottom = 20.dp),
-                state = androidx.compose.foundation.lazy.rememberLazyListState()) {
+                state = listState) {
                 if (query.isNotBlank()) {
                     if (searchType in listOf("All", "Tracks")) {
                         item("top_result") { Text(l("Top result"), fontFamily = headingFont, fontSize = 23.sp, color = white) }
@@ -636,9 +715,10 @@ class MainActivity : ComponentActivity() {
                     item("smart") {
                         MusicAtmosphere(total, musicPlaying)
                         Spacer(Modifier.height(18.dp))
-                        SmartMixButton(onSmartPlay, enabled = total > 0)
+                        SmartMixButton(onSmartPlay, enabled = total > 0, busy = mixBusy, generation = mixGeneration)
                         ConceptDivider(Modifier.padding(top = 16.dp))
                     }
+                    item("personal") { LibraryShortcuts(likedCount, onLiked, onStats) }
                     item("tracks_header") {
                         SectionTitle(l("All Tracks"), tracksExpanded, trackCount(tracks.size),
                             onSort = { sortOpen = true }) { tracksExpanded = !tracksExpanded }
@@ -857,6 +937,7 @@ class MainActivity : ComponentActivity() {
         onOpen: () -> Unit, onPlay: () -> Unit, onQueue: () -> Unit,
         onPrevious: () -> Unit, onNext: () -> Unit) {
         val view = LocalView.current
+        val transportLabel = if (playing) l("Pause") else l("Play")
         Column(Modifier.fillMaxWidth().background(panel)) {
             ConceptDivider()
             Row(Modifier.fillMaxWidth()
@@ -888,28 +969,13 @@ class MainActivity : ComponentActivity() {
                     view.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
                     onQueue()
                 }).padding(start = 12.dp, end = 4.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                AnimatedContent(targetState = track, contentKey = { it.id }, modifier = Modifier.weight(1f), label = "mini track",
-                    transitionSpec = {
-                        ((slideInHorizontally(tween(240, easing = FastOutSlowInEasing)) { it / 5 } + fadeIn(tween(200))) togetherWith
-                            (slideOutHorizontally(tween(200, easing = FastOutSlowInEasing)) { -it / 5 } + fadeOut(tween(160))))
-                            .using(SizeTransform(sizeAnimationSpec = { _, _ -> tween(0) }))
-                    }) { current ->
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Artwork(current, Modifier.size(44.dp), 4.dp)
-                        Spacer(Modifier.width(11.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(current.title, color = white, fontFamily = headingFont,
-                                fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(current.artist, color = muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                }
+                key(track.id) { MiniPlayerMetadata(track, Modifier.weight(1f)) }
                 IconButton(onClick = onPrevious, modifier = Modifier.size(48.dp)) {
                     Icon(Icons.Default.SkipPrevious, l("Previous"), tint = white)
                 }
-                IconButton(onClick = onPlay, modifier = Modifier.size(48.dp)) {
+                IconButton(onClick = onPlay, modifier = Modifier.size(48.dp).semantics { contentDescription = transportLabel }) {
                     Box(Modifier.size(40.dp).clip(RoundedCornerShape(50)).background(accent), contentAlignment = Alignment.Center) {
-                        PlayPauseGlyph(playing, MaterialTheme.colorScheme.onPrimary, Modifier.size(22.dp))
+                        PlayPauseGlyph(playing, MaterialTheme.colorScheme.onPrimary, Modifier.size(22.dp).clearAndSetSemantics {})
                     }
                 }
                 IconButton(onClick = onNext, modifier = Modifier.size(48.dp)) {
@@ -923,8 +989,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @Composable private fun MiniPlayerMetadata(track: Track, modifier: Modifier = Modifier) {
+        val reveal = remember { androidx.compose.animation.core.Animatable(1f) }
+        LaunchedEffect(track.id) {
+            reveal.snapTo(.72f)
+            reveal.animateTo(1f, tween(140))
+        }
+        // One artwork/text tree even during rapid skips. Animate only its cached layer;
+        // outgoing titles and covers no longer stay composed alongside new ones.
+        Row(modifier.graphicsLayer { alpha = reveal.value }, verticalAlignment = Alignment.CenterVertically) {
+            Artwork(track, Modifier.size(44.dp), 4.dp)
+            Spacer(Modifier.width(11.dp))
+            Column(Modifier.weight(1f)) {
+                Text(track.title, color = white, fontFamily = headingFont, fontSize = 15.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(track.artist, color = muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+        }
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
-    @Composable private fun PlayerPage(track: Track?, playing: Boolean, clock: PlaybackClock, book: Audiobook?,
+    @Composable private fun PlayerPage(track: Track?, playing: Boolean, playRequested: Boolean, clock: PlaybackClock, book: Audiobook?,
         shuffled: Boolean, repeatMode: Int, onShuffle: () -> Unit, onRepeat: () -> Unit,
         onOutput: () -> Unit, onAlbumTrack: () -> Unit, onArtist: (String) -> Unit,
         onBack: () -> Unit, onPlay: () -> Unit, onPrevious: () -> Unit,
@@ -934,10 +1019,16 @@ class MainActivity : ComponentActivity() {
         var showLyrics by remember(track?.id) { mutableStateOf(false) }
         val context = LocalContext.current
         var showSleepTimer by remember { mutableStateOf(false) }
+        val transportLabel = if (playRequested) l("Pause") else l("Play")
         val sleepState = rememberSleepTimer()
         if (showSleepTimer) SleepTimerSheet(track?.id ?: 0, book?.key.orEmpty(), onDismiss = { showSleepTimer = false })
-        val favorites = remember { context.getSharedPreferences("favorites", MODE_PRIVATE) }
-        var favorite by remember(track?.id) { mutableStateOf(track?.id?.toString() in favorites.getStringSet("tracks", emptySet()).orEmpty()) }
+        val favoriteIds = rememberFavoriteTracks()
+        val favorite = track?.id in favoriteIds
+        val heartScale = remember { androidx.compose.animation.core.Animatable(1f) }
+        LaunchedEffect(favorite) {
+            if (favorite) heartScale.animateTo(1.18f, tween(130))
+            heartScale.animateTo(1f, tween(190))
+        }
         if (showLyrics) ModalBottomSheet(onDismissRequest = { showLyrics = false }, containerColor = panel) {
             Text(l("Lyrics"), fontFamily = headingFont, color = white, fontSize = 28.sp, modifier = Modifier.padding(horizontal = 22.dp))
             LyricTimingControls(track?.id)
@@ -996,11 +1087,9 @@ class MainActivity : ComponentActivity() {
                             maxLines = if (book != null) 2 else 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f).clickable(onClick = onAlbumTrack))
                         IconButton(onClick = {
                             val id = track?.id?.toString() ?: return@IconButton
-                            favorite = !favorite
-                            val ids = favorites.getStringSet("tracks", emptySet()).orEmpty().toMutableSet()
-                            if (favorite) ids.add(id) else ids.remove(id)
-                            favorites.edit().putStringSet("tracks", ids).apply()
-                        }, enabled = track != null) { Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, l("Favorite"), tint = if (favorite) accent else white) }
+                            toggleFavoriteTrack(context, id.toLong())
+                        }, enabled = track != null) { Icon(if (favorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, l("Favorite"), tint = if (favorite) accent else white,
+                            modifier = Modifier.graphicsLayer { scaleX = heartScale.value; scaleY = heartScale.value }) }
                     }
                     if (book != null) Text(track?.artist?.ifBlank { l("Unknown author") }.orEmpty(), color = bookAccent, fontSize = 16.sp)
                     else if (track != null) ArtistLinks(track, onArtist, size = 16)
@@ -1014,10 +1103,10 @@ class MainActivity : ComponentActivity() {
                             Icon(Icons.Default.Replay30, l("Back 30 seconds"), tint = bookAccent, modifier = Modifier.size(26.dp))
                         } else IconButton(onClick = onShuffle) { Icon(Icons.Default.Shuffle, l("Shuffle"), tint = if (shuffled) accent else white, modifier = Modifier.size(23.dp)) }
                         IconButton(onClick = onPrevious) { Icon(Icons.Default.SkipPrevious, l("Previous"), tint = white, modifier = Modifier.size(32.dp)) }
-                        FilledIconButton(onClick = onPlay, modifier = Modifier.size(76.dp), enabled = track != null,
+                        FilledIconButton(onClick = onPlay, modifier = Modifier.size(76.dp).semantics { contentDescription = transportLabel }, enabled = track != null,
                             colors = IconButtonDefaults.filledIconButtonColors(containerColor = if (book != null) bookAccent else accent,
                                 contentColor = if (book != null) Color(0xFF241B13) else MaterialTheme.colorScheme.onPrimary)) {
-                            PlayPauseGlyph(playing, if (book != null) Color(0xFF241B13) else MaterialTheme.colorScheme.onPrimary, Modifier.size(33.dp))
+                            PlayPauseGlyph(playRequested, if (book != null) Color(0xFF241B13) else MaterialTheme.colorScheme.onPrimary, Modifier.size(33.dp).clearAndSetSemantics {})
                         }
                         IconButton(onClick = onNext) { Icon(Icons.Default.SkipNext, l("Next"), tint = white, modifier = Modifier.size(32.dp)) }
                         if (book != null) IconButton(onClick = { onSeek((clock.position + 30000).coerceAtMost(clock.duration.coerceAtLeast(0))) }) {

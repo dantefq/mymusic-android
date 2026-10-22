@@ -4,6 +4,15 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class PlayerNavigationTest {
+    @Test fun homeResetsUnderlyingPlayerAndCollectionOriginFromAnyPage() {
+        listOf("library", "artist", "album", "liked", "stats", "settings", "playlists", "audiobooks", "player").forEach { page ->
+            val navigation = PlayerNavigation("audiobooks")
+            navigation.openPlayer(); navigation.openCollection("artist"); navigation.page = page
+            navigation.home(); assertEquals("library", navigation.page)
+            navigation.openPlayer(); navigation.closePlayer(); assertEquals("library", navigation.page)
+            navigation.openCollection("album"); navigation.closeCollection(); assertEquals("library", navigation.page)
+        }
+    }
     @Test fun expandedPlayerKeepsItsUnderlyingPageAndIgnoresRepeatedOpen() {
         val navigation = PlayerNavigation("playlists")
         navigation.openPlayer()

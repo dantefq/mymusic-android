@@ -1,0 +1,7 @@
+<resources>
+    <string name="widget_choose_music">Выбери музыку в приложении</string>
+    <string name="widget_local_audio">Локальное аудио</string>
+    <string name="widget_open_hint">Открыть MyMusic</string>
+    <string name="widget_music">МУЗЫКА</string>
+    <string name="widget_audiobook">АУДИОКНИГА</string>
+</resources>

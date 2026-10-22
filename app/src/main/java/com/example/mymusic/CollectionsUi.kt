@@ -41,22 +41,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
-fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<Track> {
-    val counts = plays.groupingBy { it.trackId }.eachCount()
-    val favoriteGenres = tracks.filter { (counts[it.id] ?: 0) > 0 }
-        .groupingBy { it.genre }.eachCount()
-    val favoriteArtists = tracks.filter { (counts[it.id] ?: 0) > 0 }
-        .groupingBy { it.artist }.eachCount()
-    val now = System.currentTimeMillis()
-    val random = kotlin.random.Random(seed)
-    return tracks.map { track ->
-        val weight = 1.0 + (counts[track.id] ?: 0).coerceAtMost(10) * 2 +
-            (favoriteGenres[track.genre] ?: 0) + (favoriteArtists[track.artist] ?: 0) * 2 +
-            (if (track.addedAt > now - 14L * 86400000) 3 else 0)
-        track to -kotlin.math.ln(random.nextDouble().coerceAtLeast(1e-9)) / weight
-    }.sortedBy { it.second }.map { it.first }
-}
-
 @Composable fun CollectionHeader(title: String, subtitle: String) {
     Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 22.dp)) {
         Text(title, color = white, fontSize = 32.sp, fontFamily = headingFont)
@@ -118,57 +102,6 @@ fun myWaveMix(tracks: List<Track>, plays: List<PlayEvent>, seed: Int = 0): List<
             val list = grouped[chosen].orEmpty()
             items(list, key = { it.id }) { track -> CollectionTrack(track, { onPlay(list, track) }) }
         }
-    }
-}
-
-@Composable fun StatsScreen(tracks: List<Track>, plays: List<PlayEvent>, onBack: () -> Unit,
-    modifier: Modifier = Modifier) {
-    var month by remember { mutableStateOf(false) }
-    val since = System.currentTimeMillis() - (if (month) 30L else 7L) * 86400000
-    val recent = remember(plays, month) { plays.filter { it.playedAt >= since } }
-    val count = remember(recent) { recent.groupingBy { it.trackId }.eachCount() }
-    val byId = remember(tracks) { tracks.associateBy { it.id } }
-    val top = remember(tracks, count) {
-        tracks.filter { it.id in count }.sortedByDescending { count[it.id] }.take(10)
-    }
-    val artists = remember(recent, byId) {
-        recent.mapNotNull { byId[it.trackId]?.artist }.groupingBy { it }.eachCount()
-            .toList().sortedByDescending { it.second }.take(5)
-    }
-    LazyColumn(modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
-        item {
-            TextButton(onClick = onBack, modifier = Modifier.padding(start = 16.dp)) { Text(l("Back")) }
-            CollectionHeader(l("Listening"), stringResource(R.string.plays_period, recent.size, if (month) 30 else 7))
-            Row(Modifier.padding(horizontal = 24.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(selected = !month, onClick = { month = false }, label = { Text(l("Week")) })
-                FilterChip(selected = month, onClick = { month = true }, label = { Text(l("Month")) })
-            }
-            Spacer(Modifier.height(24.dp))
-            Text(l("TOP TRACKS"), color = accent, fontSize = 11.sp, letterSpacing = 2.sp,
-                fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 24.dp))
-        }
-        items(top, key = { it.id }) { track ->
-            StatBar(track.title, count[track.id] ?: 0, top.maxOfOrNull { count[it.id] ?: 0 } ?: 1)
-        }
-        item {
-            Spacer(Modifier.height(30.dp))
-            Text(l("TOP ARTISTS"), color = accent, fontSize = 11.sp, letterSpacing = 2.sp,
-                fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 24.dp))
-        }
-        items(artists) { (name, total) -> StatBar(name, total, artists.firstOrNull()?.second ?: 1) }
-    }
-}
-
-@Composable private fun StatBar(label: String, value: Int, max: Int) {
-    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 9.dp)) {
-        Row {
-            Text(label, color = white, modifier = Modifier.weight(1f), maxLines = 1)
-            Text("$value", color = muted)
-        }
-        Spacer(Modifier.height(7.dp))
-        LinearProgressIndicator(progress = { (value.toFloat() / max.coerceAtLeast(1)).coerceIn(0f, 1f) },
-            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(50)),
-            color = accent, trackColor = raised)
     }
 }
 

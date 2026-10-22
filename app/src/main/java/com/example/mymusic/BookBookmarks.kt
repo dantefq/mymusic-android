@@ -7,6 +7,10 @@ import androidx.media3.common.Player
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.Dispatchers
 import org.json.JSONObject
 import org.json.JSONArray
 
@@ -31,11 +35,13 @@ class BookBookmarks(context: Context) {
     }
 
     val changes get() = callbackFlow {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(all()) }
+        // Preference callbacks run on main. Conflate signals before decoding the bookshelf
+        // so a checkpoint never parses every saved book on the audio/UI thread.
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ -> trySend(Unit) }
         prefs.registerOnSharedPreferenceChangeListener(listener)
-        trySend(all())
+        trySend(Unit)
         awaitClose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
-    }.conflate()
+    }.conflate().map { all() }.distinctUntilChanged().flowOn(Dispatchers.IO)
 
     private fun decode(json: JSONObject): BookBookmark {
         val read = json.optJSONArray("read")

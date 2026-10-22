@@ -19,6 +19,12 @@ internal class PlayerNavigation(
     private var collectionOrigin by mutableStateOf(initialOrigin)
     val contentPage: String get() = if (page == "player") basePage else page
 
+    fun home() {
+        page = "library"
+        basePage = "library"
+        collectionOrigin = "library"
+    }
+
     fun openPlayer() {
         if (page == "player") return
         basePage = page

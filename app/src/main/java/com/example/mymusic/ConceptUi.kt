@@ -19,6 +19,9 @@ import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -51,7 +54,9 @@ import coil.request.ImageRequest
             pop()
         }
     } }
-    ClickableText(credits, modifier, style = MaterialTheme.typography.bodySmall.merge(TextStyle(fontSize = size.sp, color = color)),
+    ClickableText(credits, modifier.semantics {
+        customActions = names.map { name -> CustomAccessibilityAction(name) { onArtist(name); true } }
+    }, style = MaterialTheme.typography.bodySmall.merge(TextStyle(fontSize = size.sp, color = color)),
         maxLines = 1, overflow = TextOverflow.Ellipsis, onClick = { offset ->
             credits.getStringAnnotations("artist", offset, offset).firstOrNull()?.let { onArtist(it.item) }
         })

@@ -1,0 +1,32 @@
+<resources>
+    <string name="ui_statistics">Статистика</string>
+    <string name="ui_liked_tracks">Любимые треки</string>
+    <string name="ui_your_music_in_numbers">Твоя музыка в цифрах</string>
+    <string name="ui_every_heart_in_the_player_saves_a_song_here">Каждое сердечко в плеере сохраняет песню сюда</string>
+    <string name="ui_search_liked_tracks">Поиск среди любимых</string>
+    <string name="ui_tap_the_heart_on_a_song_to_start_your_collection">Нажми на сердечко в плеере, чтобы начать коллекцию</string>
+    <string name="ui_remove_from_liked_tracks">Убрать из любимых</string>
+    <string name="ui_your_listening_story">Твоя музыкальная история</string>
+    <string name="ui_little_discoveries_in_your_everyday_soundtrack">Маленькие открытия в привычном звучании</string>
+    <string name="ui_song_starts">Запусков песен</string>
+    <string name="ui_different_tracks">Разных треков</string>
+    <string name="ui_your_rhythm">Твой ритм</string>
+    <string name="ui_daily_song_starts_oldest_to_newest">Запуски по дням: от ранних к сегодняшнему</string>
+    <string name="ui_different_voices_in_your_rotation">Разные голоса в твоей музыке</string>
+    <string name="ui_tracks_absent_from_earlier_history_within_the_last_90_days">Треки, которых не было в более ранней истории за последние 90 дней</string>
+    <string name="ui_the_hour_you_most_often_start_a_song">В этот час ты чаще всего включаешь музыку</string>
+    <string name="ui_your_story_is_just_beginning">Твоя история только начинается</string>
+    <string name="ui_play_music_and_your_patterns_will_appear_here">Слушай музыку — здесь появятся твои привычки и открытия</string>
+    <string name="ui_song_starts_are_counted_not_minutes_listened">Считаем запуски песен, а не минуты прослушивания</string>
+    <string name="ui_less_repeats_more_discoveries">МЕНЬШЕ ПОВТОРОВ. БОЛЬШЕ ОТКРЫТИЙ.</string>
+    <string name="ui_finding_your_next_discoveries">Ищем новые сочетания</string>
+    <string name="ui_a_fresh_route_through_your_music">Новый маршрут по твоей музыке</string>
+    <string name="ui_different_artists_rarely_played_tracks_your_likes">Разные артисты · Редкие треки · Твои лайки</string>
+    <string name="ui_could_not_create_a_mix_try_again">Не удалось собрать микс. Попробуй ещё раз.</string>
+    <string name="mix_saved_count">Сохранено: %1$d</string>
+    <string name="mix_artist_fact">Разных исполнителей: %1$d</string>
+    <string name="mix_discovery_fact">%1$d%% — новые в этом периоде</string>
+    <string name="mix_hour_fact">Твой музыкальный час: %1$02d:00</string>
+    <string name="mix_streak_fact">Дней подряд с музыкой: %1$d</string>
+    <string name="mix_active_days">Активных дней в этом периоде: %1$d</string>
+</resources>

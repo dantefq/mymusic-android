@@ -5,6 +5,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.media3.common.Player
+import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
 
 /** Subpixel clock changes do not need another GPU frame for a thin progress rail. */
@@ -24,7 +25,7 @@ class PlaybackClock {
         internal set
 }
 
-@Composable fun rememberPlaybackClock(player: Player?): PlaybackClock {
+@Composable fun rememberPlaybackClock(player: Player?, sampleIntervalMs: Long = 100L): PlaybackClock {
     val clock = remember(player) { PlaybackClock() }
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     DisposableEffect(player) {
@@ -40,18 +41,13 @@ class PlaybackClock {
         player?.addListener(listener)
         onDispose { player?.removeListener(listener) }
     }
-    LaunchedEffect(player, lifecycle, clock.playing) {
+    LaunchedEffect(player, lifecycle, clock.playing, sampleIntervalMs) {
         lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            var lastSample = 0L
             while (player != null && clock.playing) {
-                withFrameNanos { frame ->
-                    // Lyrics and progress need at most 30 samples/s. Seeks still refresh
-                    // immediately through the Player listener, and gestures run at full rate.
-                    if (frame - lastSample >= 30_000_000L) {
-                        clock.position = player.currentPosition.coerceAtLeast(0)
-                        lastSample = frame
-                    }
-                }
+                // Audio position needs no display-frame callback. Gestures and seeks are
+                // immediate; lyric boundaries stay within 100 ms and labels use whole seconds.
+                clock.position = player.currentPosition.coerceAtLeast(0)
+                delay(sampleIntervalMs.coerceAtLeast(100))
             }
         }
     }

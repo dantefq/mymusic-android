@@ -139,9 +139,21 @@ class AudiobookPlaybackTest {
             Thread.sleep(250)
             assertEquals("Music must preserve the book position", 3700L, BookBookmarks(context).get(alpha.key)!!.positionMs)
             onMain {
-                player.setMediaItem(bookItem(beta, beta.chapters.first(), true)); player.prepare(); player.pause(); player.seekTo(2300)
+                player.setMediaItem(bookItem(beta, beta.chapters.first(), true)); player.prepare(); player.pause()
             }
-            waitFor("Second book gets its own bookmark") { bookmarks.get(beta.key)?.positionMs == 2300L }
+            waitFor("Second book queue must reach the service before seeking") {
+                var ready = false
+                onMain { ready = player.currentMediaItem?.mediaId == beta.chapters.first().id.toString() && player.playbackState == Player.STATE_READY }
+                ready
+            }
+            onMain { player.seekTo(2300) }
+            try {
+                waitFor("Second book gets its own bookmark") { bookmarks.get(beta.key)?.positionMs == 2300L }
+            } catch (failure: AssertionError) {
+                var actual = ""
+                onMain { actual = "id=${player.currentMediaItem?.mediaId}, position=${player.currentPosition}, requested=${player.playWhenReady}" }
+                throw AssertionError("Second book bookmark: ${bookmarks.get(beta.key)}; player: $actual", failure)
+            }
             switchToMusic()
             assertEquals(3700L, bookmarks.get(alpha.key)!!.positionMs)
             assertEquals(2300L, bookmarks.get(beta.key)!!.positionMs)

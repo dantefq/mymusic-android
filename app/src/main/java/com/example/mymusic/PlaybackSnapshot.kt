@@ -15,6 +15,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -25,8 +26,18 @@ class PlaybackSnapshot(context: Context) {
     private val writes = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val queueMutex = Mutex()
     private var queueWrite: Job? = null
+    private var queueCapture: Job? = null
 
-    fun saveQueue(player: Player) {
+    fun saveQueue(player: Player, immediate: Boolean = false) {
+        queueCapture?.cancel()
+        savePosition(player)
+        if (immediate) captureQueue(player) else {
+            // Coalesce a burst of chapter metadata events before copying the whole queue.
+            queueCapture = writes.launch(Dispatchers.Main.immediate) { delay(32); captureQueue(player) }
+        }
+    }
+
+    private fun captureQueue(player: Player) {
         // Player access stays on its application thread; JSON work runs off the UI thread.
         val items = (0 until player.mediaItemCount).map(player::getMediaItemAt)
         queueWrite?.cancel()
@@ -49,7 +60,6 @@ class PlaybackSnapshot(context: Context) {
                 prefs.edit().putString("queue", serialized).apply()
             }
         }
-        savePosition(player)
     }
 
     fun savePosition(player: Player) {

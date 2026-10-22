@@ -36,7 +36,7 @@ import kotlin.math.cos
     var finished by remember { mutableStateOf(!animate) }
     val reveal = remember { Animatable(if (animate) 0f else 1f) }
     LaunchedEffect(animate) {
-        if (animate) reveal.animateTo(1f, tween(1450, easing = FastOutSlowInEasing))
+        if (animate) reveal.animateTo(1f, tween(700, easing = FastOutSlowInEasing))
         finished = true
     }
     Box(Modifier.fillMaxSize()) {

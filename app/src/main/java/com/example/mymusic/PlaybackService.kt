@@ -61,9 +61,12 @@ class PlaybackService : MediaSessionService() {
                             events.contains(Player.EVENT_REPEAT_MODE_CHANGED) ||
                             events.contains(Player.EVENT_SHUFFLE_MODE_ENABLED_CHANGED)) snapshot.savePosition(player)
                     }
-                    if (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ||
-                        events.contains(Player.EVENT_IS_PLAYING_CHANGED)) {
-                        PlayerWidget.update(this@PlaybackService, player.currentMediaItem, player.isPlaying)
+                    if (!restoring && (events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ||
+                        events.contains(Player.EVENT_IS_PLAYING_CHANGED) || events.contains(Player.EVENT_PLAY_WHEN_READY_CHANGED) ||
+                        events.contains(Player.EVENT_MEDIA_METADATA_CHANGED) || events.contains(Player.EVENT_TIMELINE_CHANGED) ||
+                        events.contains(Player.EVENT_POSITION_DISCONTINUITY) || events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED) ||
+                        events.contains(Player.EVENT_AVAILABLE_COMMANDS_CHANGED) || events.contains(Player.EVENT_PLAYBACK_PARAMETERS_CHANGED))) {
+                        PlayerWidget.update(this@PlaybackService, player)
                     }
                 }
                 override fun onPositionDiscontinuity(oldPosition: Player.PositionInfo, newPosition: Player.PositionInfo, reason: Int) {
@@ -112,30 +115,50 @@ class PlaybackService : MediaSessionService() {
         snapshot.restore(player)
         restoring = false
         session = MediaSession.Builder(this, player).setSessionActivity(activityIntent).build()
+        PlayerWidget.update(this, player)
         val notificationProvider = DefaultMediaNotificationProvider.Builder(this).build()
         notificationProvider.setSmallIcon(R.drawable.notification_icon)
         setMediaNotificationProvider(notificationProvider)
         scope.launch {
             val prefs = getSharedPreferences("playback", MODE_PRIVATE)
+            var emptySmartQueue = emptyList<String>()
+            var emptyRetryAt = 0L
+            var widgetTick = 0L
+            var checkpointTick = 0L
             while (true) {
                 if (player.isPlaying) {
-                    snapshot.savePosition(player)
-                    bookmarks.save(player)
+                    if (SystemClock.elapsedRealtime() - checkpointTick >= 5000L) {
+                        snapshot.savePosition(player)
+                        bookmarks.save(player)
+                        checkpointTick = SystemClock.elapsedRealtime()
+                    }
+                    if (SystemClock.elapsedRealtime() - widgetTick >= 15000L) {
+                        PlayerWidget.update(this@PlaybackService, player)
+                        widgetTick = SystemClock.elapsedRealtime()
+                    }
                 }
                 val queueMode = prefs.getString("queue_mode", "off")
-                if (queueMode in listOf("random", "smart") && player.mediaItemCount > 0 &&
+                if (queueMode in listOf("random", "smart") && player.playWhenReady && player.mediaItemCount > 0 &&
                     player.mediaItemCount - player.currentMediaItemIndex <= 3) {
                     val currentId = player.currentMediaItem?.mediaId
-                    val next = withContext(Dispatchers.IO) {
+                    val queueIds = (player.currentMediaItemIndex until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }
+                    val queueCount = player.mediaItemCount
+                    val skipRefill = queueMode == "smart" && queueIds == emptySmartQueue && SystemClock.elapsedRealtime() < emptyRetryAt
+                    val next = if (skipRefill) emptyList() else withContext(Dispatchers.IO) {
                         val db = MusicDb.get(this@PlaybackService)
                         val tracks = db.tracks().all().filterNot { it.isAudiobook }
                         if (queueMode == "smart") {
                             val history = db.plays().since(System.currentTimeMillis() - 90L * 86400000)
-                            myWaveMix(tracks, history, kotlin.random.Random.nextInt())
-                                .filterNot { it.id.toString() == currentId }.ifEmpty { tracks }.take(20)
+                            SmartMixStore(this@PlaybackService).next(tracks, history, favoriteTrackIds(this@PlaybackService),
+                                blocked = queueIds.mapNotNull(String::toLongOrNull).toSet())
                         } else randomContinuation(tracks, currentId?.toLongOrNull())
                     }
-                    if (prefs.getString("queue_mode", "off") == queueMode && player.currentMediaItem?.mediaId == currentId) {
+                    if (!skipRefill && queueMode == "smart") {
+                        emptySmartQueue = if (next.isEmpty()) queueIds else emptyList()
+                        emptyRetryAt = SystemClock.elapsedRealtime() + 30000L
+                    }
+                    if (next.isNotEmpty() && prefs.getString("queue_mode", "off") == queueMode && player.currentMediaItem?.mediaId == currentId &&
+                        player.mediaItemCount == queueCount && queueIds == (player.currentMediaItemIndex until player.mediaItemCount).map { player.getMediaItemAt(it).mediaId }) {
                         if (player.currentMediaItemIndex > 30) player.removeMediaItems(0, player.currentMediaItemIndex - 10)
                         player.addMediaItems(next.map { track ->
                             MediaItem.Builder().setMediaId(track.id.toString()).setUri(track.uri)
@@ -230,13 +253,15 @@ class PlaybackService : MediaSessionService() {
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         bookmarks.save(player)
-        snapshot.savePosition(player)
+        snapshot.saveQueue(player, immediate = true)
         super.onTaskRemoved(rootIntent)
     }
 
     override fun onDestroy() {
         bookmarks.save(player)
-        snapshot.savePosition(player)
+        snapshot.saveQueue(player, immediate = true)
+        PlayerWidget.stopped(this)
+        restoring = true
         AudioEffects.equalizer = null; AudioEffects.bassBoost = null; AudioEffects.loudnessEnhancer = null
         equalizer?.release(); bassBoost?.release(); loudnessEnhancer?.release()
         crossfadeJob?.cancel()
